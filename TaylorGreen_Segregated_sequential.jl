@@ -13,7 +13,7 @@ using Parameters
 using SparseArrays
 
 using GridapDistributed: Algebra
-using Gridap:FESpaces
+using Gridap.FESpaces
 using Gridap.Arrays
 using Gridap.CellData
 using GridapSolvers.LinearSolvers
@@ -26,12 +26,12 @@ include("HParam.jl")
 
 
 params = Dict(
-      :N => 32,
+      :N => 20,
       :D => 2, #Dimension
       :order => 1, 
       :t0 => 0.0,
       :dt => 0.01,
-      :tF => 1.0,
+      :tF => 0.2,
       :case => "TaylorGreen",
 :θ => 0.5)
 
@@ -77,9 +77,6 @@ params = Dict(
     X0 = X(0.0)
   
   
-    #Assemble Matrices
-  
-  
     time_step = dt:dt:tF
   
   
@@ -100,12 +97,23 @@ params = Dict(
   
     vec_Ap = vec_App+ vec_Apu
     vec_Au = vec_Aup+ vec_Auu
-  
-  
-    #Vectors initialization
-  
-  
-  
+
+
+include("LinearUtilities.jl")
+
+coeff = [2.1875, -2.1875, 1.3125, -0.3125]
+
+#Vectors initialization
+using Test
+
+Mat_test = Matrix(Mat_App)
+   for i = 1:1:size(Mat_test)[1]
+      @test isapprox(Mat_test[i,:], Mat_test[:,i]) 
+   end
+   
+lu(Mat_App)
+
+
     vec_pm = get_free_dof_values(ph0)
     vec_um = get_free_dof_values(uh0)
   
@@ -121,63 +129,74 @@ params = Dict(
     b1 = zeros(ludofs)
     b2 = zeros(lpdofs)
   
+  vec_vec_um = create_ũ_vector(vec_um)
   
+
+  M = 6
   
-    M = 5
-  
-  
-  
-    for tn in time_step
+
+  solve_press = :gmres
+
+  p_time = Float64[]
+  u_time = Float64[]
+  assembly_time = Float64[]
+
+    for (it,tn) in enumerate(time_step)
       err = 1
       m = 0
       Pl = JacobiLinearSolver()
-      solver_vel = LinearSolvers.GMRESSolver(20,Pl,1.e-8)
+      solver_vel = LinearSolvers.GMRESSolver(15,Pl,1.e-8)
       ns1 = numerical_setup(symbolic_setup(solver_vel,Mat_ML),Mat_ML)
-  
-      Pl = JacobiLinearSolver()
-      solver_pres = LinearSolvers.GMRESSolver(20,Pl,1.e-6)
-      ns2 = numerical_setup(symbolic_setup(solver_pres,Mat_S),Mat_S)
-  
-      while m<=M
+      if solve_press == :cg
+          P_rich_sm  =  RichardsonSmoother(JacobiLinearSolver(),10,2.0/3.0) #RichardsonSmoother(JacobiLinearSolver(),10,2.0/3.0) #SymGaussSeidelSmoother(10)
+          ss2 = symbolic_setup(P_rich_sm,Mat_S)
+          ns2 = numerical_setup(ss2,Mat_S)
+
+      elseif solve_press ==:gmres
+        Pl = Pl = JacobiLinearSolver()
+        solver_pres = LinearSolvers.GMRESSolver(15,Pl,1.e-7)
+        ns2 = numerical_setup(symbolic_setup(solver_pres,Mat_S),Mat_S)
+      end
+
+      while m<M
   
 
-          Δpm1 .= zeros(lpdofs)
   
           println("solving velocity")
-            
+          tu = @elapsed begin  
             @time b1 = -Mat_Auu * vec_um - Mat_Aup * vec_pm - Mat_ML * vec_am +
             Mat_Auu * dt * vec_am + (1 - θ) * Mat_Aup * vec_sum_pm + vec_Au
   
             Δa_star = LinearSolvers.allocate_col_vector(Mat_ML)
             solve!(Δa_star,ns1,b1)
-              
+          end # end begin, solving velocity    
   
           println("solving pressure")
   
   
+          tp = @elapsed begin
+              # -Vec_A because changing sign in the continuity equations
+
+             b2 .= Mat_Tpu * Δa_star + Mat_Apu * (vec_um + dt * Δa_star) + Mat_App * vec_pm + Mat_Tpu * vec_am - vec_Ap
+             Δpm1 .= zeros(lpdofs)
+
+            if solve_press == :cg
+                    IterativeSolvers.cg!(Δpm1,Mat_S,b2;Pl=ns2,
+              reltol=1.0e-6,
+              log=true)
+            elseif solve_press == :gmres
+            end
+
   
-          #-Vec_A because changing sign in the continuity equations
-          # @time begin
-          #   b2 .= Mat_Tpu * Δa_star + Mat_Apu * (vec_um + dt * Δa_star) + Mat_App * vec_pm + Mat_Tpu * vec_am - vec_Ap
+
+     
   
-          #   P_rich_sm  =  SymGaussSeidelSmoother(10) #RichardsonSmoother(JacobiLinearSolver(),10,2.0/3.0)
-          #   ss2 = symbolic_setup(P_rich_sm,Mat_S)
-          #   ns2 = numerical_setup(ss2,Mat_S)
-          #   IterativeSolvers.cg!(Δpm1,Mat_S,b2;
-          #   verbose=i_am_main(parts),Pl=ns2,
-          #   reltol=1.0e-8,
-          #   log=true)
-  
-          #  end #end begin
-  
-          b2 = Mat_Tpu * Δa_star + Mat_Apu * (vec_um + dt * Δa_star) + Mat_App * vec_pm + Mat_Tpu * vec_am - vec_Ap
-            
-            
-            solve!(Δpm1,ns2,b2)
-  
+          solve!(Δpm1,ns2,b2)
+          end
         
-  
-   
+          push!(p_time,tp)
+          push!(u_time,tu)
+
   
   
   
@@ -206,20 +225,45 @@ params = Dict(
         println("error = $err")
   
       end #end while
-  
-      u_adv = FEFunction(U(tn), vec_um)
+      # update_ũ_vector!(vec_vec_um, vec_um)
+      # vec_um .= update_ũ(vec_vec_um, coeff)
+      # update_free_values!(u_adv, vec_um)
+
       println("update_matrices")
-  
+
+    a_time = @elapsed begin
+
+    uh_tn = FEFunction(U(tn), vec_um)
+    ph_tn = FEFunction(P(tn), vec_pm)
+
     Mat_Tuu, Mat_Tpu, Mat_Auu, Mat_Aup, Mat_Apu, Mat_App, 
-    Mat_ML, Mat_inv_ML, Mat_S, vec_Auu, vec_Aup,vec_Apu, vec_App = initialize_matrices_and_vectors(trials,tests, tn, u_adv, params)
-    
+    Mat_ML, Mat_inv_ML, Mat_S, vec_Auu, vec_Aup,vec_Apu, vec_App = _matrices_and_vectors!(trials, tests, tn, uh_tn, params)
     vec_Ap = vec_App+ vec_Apu
     vec_Au = vec_Aup+ vec_Auu
-  
-      uh_tn = FEFunction(U(tn), vec_um)
-      ph_tn = FEFunction(P(tn), vec_pm)
-  
-      writevtk(Ω, "TG_segregated_$tn.vtu", cellfields = ["uh" => uh_tn, "uh_analytic"=> velocity(tn), "ph" => ph_tn, "ph_analytic"=> pa(tn)])
+
+      
+
+
+  end
+
+  push!(assembly_time,a_time)
+
+
+      # writevtk(Ω, "TG_segregated_$tn.vtu", cellfields = ["uh" => uh_tn, "uh_analytic"=> velocity(tn), "ph" => ph_tn, "ph_analytic"=> pa(tn)])
     end #end for
   
   
+  using Statistics, Plots
+    p_time = p_time[2:end]
+    u_time = u_time[2:end]
+    assembly_time =  assembly_time[2:end]
+x_time = 1:1:(length(p_time))
+# plotly()
+plot(x_time,u_time, label = "u")
+plot!(x_time,p_time, label = "p")
+
+Statistics.mean(u_time) * M
+Statistics.mean(p_time) * M
+Statistics.mean(assembly_time)
+
+# x_time

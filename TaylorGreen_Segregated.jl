@@ -42,12 +42,12 @@ with_backend(backend, partition) do parts
     end
   
     params = Dict(
-      :N => 32,
+      :N => 60,
       :D => 2, #Dimension
       :order => 1, 
       :t0 => 0.0,
       :dt => 0.01,
-      :tF => 1.0,
+      :tF => 0.5,
       :case => "TaylorGreen",
       :θ => 0.5)
 
@@ -140,7 +140,7 @@ with_backend(backend, partition) do parts
   
   
   
-    M = 5
+    M = 6
   
   
   
@@ -152,7 +152,7 @@ with_backend(backend, partition) do parts
       ns1 = numerical_setup(symbolic_setup(solver_vel,Mat_ML),Mat_ML)
   
       Pl = JacobiLinearSolver()
-      solver_pres = LinearSolvers.GMRESSolver(20,Pl,1.e-6)
+      solver_pres = LinearSolvers.GMRESSolver(20,Pl,1.e-8)
       ns2 = numerical_setup(symbolic_setup(solver_pres,Mat_S),Mat_S)
   
       while m<=M
@@ -181,8 +181,10 @@ with_backend(backend, partition) do parts
   
   
           Δa_star = GridapDistributed.change_ghost(Δa_star, Mat_Tpu.cols)
-  
+
           #-Vec_A because changing sign in the continuity equations
+          b2 = Mat_Tpu * Δa_star + Mat_Apu * (vec_um + dt * Δa_star) + Mat_App * vec_pm + Mat_Tpu * vec_am - vec_Ap
+
           # @time begin
           #   b2 .= Mat_Tpu * Δa_star + Mat_Apu * (vec_um + dt * Δa_star) + Mat_App * vec_pm + Mat_Tpu * vec_am - vec_Ap
   
@@ -196,7 +198,6 @@ with_backend(backend, partition) do parts
   
           #  end #end begin
   
-          b2 = Mat_Tpu * Δa_star + Mat_Apu * (vec_um + dt * Δa_star) + Mat_App * vec_pm + Mat_Tpu * vec_am - vec_Ap
             
             
             solve!(Δpm1,ns2,b2)
