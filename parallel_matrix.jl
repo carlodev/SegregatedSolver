@@ -1,4 +1,14 @@
 
+function allocate_Mat_inv_ML(Mat_ML::PSparseMatrix) 
+  return PVector(t,Mat_ML.rows)
+end
+
+function allocate_Mat_inv_ML(Mat_ML::SparseMatrixCSC) 
+  l = size(Mat_ML)[1]
+
+  return zeros(l)
+end
+
 function inv_lump_vel_mass!(Mat_inv_ML::PVector,Mat_ML::PSparseMatrix)
     values = map_parts(Mat_ML.values) do val
         N = maximum(rowvals(val))
@@ -17,6 +27,16 @@ function inv_lump_vel_mass!(Mat_inv_ML::PVector,Mat_ML::PSparseMatrix)
     Mat_inv_ML .= PVector(values,Mat_ML.rows) 
 end
 
+
+function inv_lump_vel_mass!(Mat_inv_ML::Vector, Mat_ML::SparseMatrixCSC)
+  inv_ML_vec = 1 ./ sum(Mat_ML, dims=2)[:,1]
+      if !isempty(inv_ML_vec[inv_ML_vec.==Inf])
+      error("The matrix ML can not be inverted because after lumping zero values are detected")
+  end
+  
+  Mat_inv_ML.=inv_ML_vec
+  
+end
 
 mutable struct Vector_PVector
     u0::PVector
@@ -118,7 +138,7 @@ function _matrices_and_vectors!(trials, tests, t::Real, u_adv, params)
       Vec_Apu = get_vector(Af_Apu)
       Vec_App = get_vector(Af_App)
 
-      Mat_inv_ML = PVector(t,Mat_ML.rows)
+      Mat_inv_ML = allocate_Mat_inv_ML(Mat_ML)
       inv_lump_vel_mass!(Mat_inv_ML,Mat_ML)
 
       Vec_Ap = Vec_Apu + Vec_App
