@@ -1,6 +1,6 @@
 
 function allocate_Mat_inv_ML(Mat_ML::PSparseMatrix) 
-  return PVector(t,Mat_ML.rows)
+  return PVector(0.0,Mat_ML.rows)
 end
 
 function allocate_Mat_inv_ML(Mat_ML::SparseMatrixCSC) 
@@ -38,25 +38,12 @@ function inv_lump_vel_mass!(Mat_inv_ML::Vector, Mat_ML::SparseMatrixCSC)
   
 end
 
-mutable struct Vector_PVector
-    u0::PVector
-    u1::PVector
-    u2::PVector
-    u3::PVector
-    end
-    function update_vec_vec_um!(PV::Vector_PVector, u_new::PVector)
-      PV.u3 .= PV.u2
-      PV.u2 .= PV.u1
-      PV.u1 .= PV.u0
-      PV.u0 .= u_new
-  end
-
 
 
 
 function initialize_matrices_and_vectors(trials,tests, t::Real, u_adv, params)
   
-  return _matrices_and_vectors!(trials,tests, t::Real, u_adv, params)
+  return _matrices_and_vectors!(trials,tests, t, u_adv,params)
 end
 
 function _matrices_and_vectors!(trials, tests, t::Real, u_adv, params)
@@ -164,7 +151,12 @@ function update_matrix_vector!(a::Function,l::Function,A::AbstractMatrix,b::Abst
  
 end
 
-function update_matrixvector!(a::Function,l::Function,A::AbstractMatrix,b::AbstractVector,trial::TransientTrialFESpace,test::GridapDistributed.DistributedSingleFieldFESpace,t::Real)
+
+function update_matrix_vector!(a::Function,l::Function,A::AbstractMatrix,b::AbstractVector,trial::FESpace,test::FESpace,t::Real)
+ 
+end
+
+function update_matrixvector!(a::Function,l::Function,A::AbstractMatrix,b::AbstractVector,trial::TransientTrialFESpace,test::Union{GridapDistributed.DistributedSingleFieldFESpace, FESpace},t::Real)
   afop = AffineFEOperator(a,l,trial(t),test)
   println(norm(get_vector(afop)))
   b.= get_vector(afop)
