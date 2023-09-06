@@ -1,6 +1,7 @@
 
 function allocate_Mat_inv_ML(Mat_ML::PSparseMatrix) 
-  return PVector(0.0,Mat_ML.rows)
+  return pzeros(Mat_ML.row_partition)
+  # return PVector(0.0,Mat_ML.row_partition)
 end
 
 function allocate_Mat_inv_ML(Mat_ML::SparseMatrixCSC) 
@@ -10,7 +11,7 @@ function allocate_Mat_inv_ML(Mat_ML::SparseMatrixCSC)
 end
 
 function inv_lump_vel_mass!(Mat_inv_ML::PVector,Mat_ML::PSparseMatrix)
-    values = map_parts(Mat_ML.values) do val
+    values = map(Mat_ML.matrix_partition) do val
         N = maximum(rowvals(val))
     
         V = zeros(N)
@@ -24,7 +25,7 @@ function inv_lump_vel_mass!(Mat_inv_ML::PVector,Mat_ML::PSparseMatrix)
         V = 1 ./V
 
     end
-    Mat_inv_ML .= PVector(values,Mat_ML.rows) 
+    Mat_inv_ML .= PVector(values,Mat_ML.row_partition) 
 end
 
 

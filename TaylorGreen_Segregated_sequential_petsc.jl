@@ -27,7 +27,7 @@ include("HParam.jl")
 
 
 params = Dict(
-      :N => 10,
+      :N => 250,
       :D => 2, #Dimension
       :order => 1, 
       :t0 => 0.0,
@@ -107,15 +107,21 @@ coeff = [2.1875, -2.1875, 1.3125, -0.3125]
 function vel_kspsetup(ksp)
   pc = Ref{GridapPETSc.PETSC.PC}()
   @check_error_code GridapPETSc.PETSC.KSPSetType(ksp[], GridapPETSc.PETSC.KSPGMRES)
+  # @check_error_code GridapPETSc.PETSC.KSPSetReusePreconditioner(ksp[], GridapPETSc.PETSC.PETSC_TRUE)
   @check_error_code GridapPETSc.PETSC.KSPGetPC(ksp[], pc)
   @check_error_code GridapPETSc.PETSC.PCSetType(pc[], GridapPETSc.PETSC.PCGAMG)
+  # 
+
 end
 
 function pres_kspsetup(ksp)
   pc = Ref{GridapPETSc.PETSC.PC}()
   @check_error_code GridapPETSc.PETSC.KSPSetType(ksp[], GridapPETSc.PETSC.KSPCG)
+  # @check_error_code GridapPETSc.PETSC.KSPSetReusePreconditioner(ksp[], GridapPETSc.PETSC.PETSC_TRUE)
   @check_error_code GridapPETSc.PETSC.KSPGetPC(ksp[], pc)
   @check_error_code GridapPETSc.PETSC.PCSetType(pc[], GridapPETSc.PETSC.PCGAMG)
+  # 
+
 end
 
 
@@ -140,59 +146,54 @@ end
   M = 6
   
 
-  solve_press = :gmres
-
   p_time = Float64[]
   u_time = Float64[]
   assembly_time = Float64[]
-
+options = "-log_view"
     for (it,tn) in enumerate(time_step)
       err = 1
       m = 0
+      GridapPETSc.with(args=split(options)) do
+        solver_v = PETScLinearSolver(vel_kspsetup)
+        ss1 = symbolic_setup(solver_v, Mat_ML)
+        ns1 = numerical_setup(ss1, Mat_ML)
 
+        solver_p = PETScLinearSolver(pres_kspsetup)
+        ss2 = symbolic_setup(solver_p, Mat_S)
+        ns2 = numerical_setup(ss2, Mat_S)
+        tsolve = @elapsed begin
       while m<M
   
 
   
           println("solving velocity")
-          tu = @elapsed begin  
+          # tu = @elapsed begin  
             @time b1 = -Mat_Auu * vec_um - Mat_Aup * vec_pm - Mat_ML * vec_am +
             Mat_Auu * dt * vec_am + (1 - θ) * Mat_Aup * vec_sum_pm + vec_Au
   
             Δa_star = LinearSolvers.allocate_col_vector(Mat_ML)
-            GridapPETSc.with() do
-              solver_v = PETScLinearSolver(vel_kspsetup)
-              ss1 = symbolic_setup(solver_v, Mat_ML)
-              ns1 = numerical_setup(ss1, Mat_ML)
+           
               @time Gridap.solve!(Δa_star, ns1, b1)
-             end #end Gridap
-          end # end begin, solving velocity    
+          # end # end begin, solving velocity    
   
           println("solving pressure")
   
   
-          tp = @elapsed begin
+          # tp = @elapsed begin
               # -Vec_A because changing sign in the continuity equations
             
-             b2 .= Mat_Tpu * Δa_star + Mat_Apu * (vec_um + dt * Δa_star) + Mat_App * vec_pm + Mat_Tpu * vec_am - vec_Ap
+              @time b2 .= Mat_Tpu * Δa_star + Mat_Apu * (vec_um + dt * Δa_star) + Mat_App * vec_pm + Mat_Tpu * vec_am - vec_Ap
              Δpm1 .= zeros(lpdofs)
-             GridapPETSc.with() do
-              solver_p = PETScLinearSolver(pres_kspsetup)
-              ss2 = symbolic_setup(solver_p, Mat_S)
-              ns2 = numerical_setup(ss2, Mat_S)
-              Gridap.solve!(Δpm1,ns2,b2)
-            end #end GridapPETSc
+       
+             @time Gridap.solve!(Δpm1,ns2,b2)
             
                
   
-          end
+          # end #end begin, solving pressure  
+     
           
-          GridapPETSc.with() do
-            GridapPETSc.GridapPETSc.gridap_petsc_gc()
-          end
-          
-          push!(p_time,tp)
-          push!(u_time,tu)
+          # push!(p_time,tp)
+          # push!(u_time,tu)
 
   
   
@@ -222,7 +223,10 @@ end
         println("error = $err")
   
       end #end while
-
+    end #end elaspsed while
+    println(tsolve)
+      GridapPETSc.GridapPETSc.gridap_petsc_gc()
+    end #end GridapPETSc
 
       # update_ũ_vector!(vec_vec_um, vec_um)
       # vec_um .= update_ũ(vec_vec_um, coeff)
@@ -266,3 +270,4 @@ Statistics.mean(p_time) * M
 Statistics.mean(assembly_time)
 
 # x_time
+
