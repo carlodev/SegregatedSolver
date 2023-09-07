@@ -1,7 +1,6 @@
 
 function allocate_Mat_inv_ML(Mat_ML::PSparseMatrix) 
   return pzeros(Mat_ML.row_partition)
-  # return PVector(0.0,Mat_ML.row_partition)
 end
 
 function allocate_Mat_inv_ML(Mat_ML::SparseMatrixCSC) 
@@ -90,7 +89,7 @@ function _matrices_and_vectors!(trials, tests, t::Real, u_adv, params)
   
     ML(u, v) = Tuu(u, v) + (θ * dt) * Auu(u, v)
   
-    S(p, q) = -θ * ∫((dt .+ τsu ∘ (u_adv, h)) ⋅ ((∇(q)') ⊙ (∇(p))))dΩ
+    S(p, q) = - θ * ∫((dt .+ τsu ∘ (u_adv, h)) ⋅ ((∇(q)') ⊙ (∇(p))))dΩ
 
     rhs(v) = 0.0
 
@@ -132,33 +131,109 @@ function _matrices_and_vectors!(trials, tests, t::Real, u_adv, params)
       Vec_Ap = Vec_Apu + Vec_App
       Vec_Au = Vec_Auu + Vec_Aup
       return  Mat_Tuu, Mat_Tpu, Mat_Auu, Mat_Aup, Mat_Apu, Mat_App, Mat_ML, Mat_inv_ML, Mat_S, Vec_Auu, Vec_Aup,Vec_Apu, Vec_App
+  end
+  
 
-      # else
+ function _matrices_and_vectors_VMS!(trials, tests, t::Real, u_adv, params)
+    @unpack ν, dt,h, dΩ, θ, G, GG, gg,Cᵢ = params
 
-      # Vec_Auu, Vec_Aup, Vec_Apu, Vec_App = Vecs
-      # println("t = $t")
-      # update_vector!(Auu,rhs,Vec_Auu,U,V,t)
-      # update_vector!(Aup,rhs,Vec_Aup,P,V,t)
-      # update_vector!(Apu,rhs,Vec_Apu,U,Q,t)
-      # update_vector!(App,rhs,Vec_App,P,Q,t)
-    
-      # println("update matrix finished")
-         
+    cconv(uadv, ∇u) = uadv ⋅ (∇u)
+
+    val(x) = x
+    val(x::Gridap.Fields.ForwardDiff.Dual) = x.value 
+
+    function τm(uu, G, GG)
+      τ₁ = Cᵢ[1] * (2 / dt)^2 #Here, you can increse the 2 if CFL high
+      τ₃ = Cᵢ[2] * (ν^2 * GG)
+  
+      val(x) = x
+      function val(x::Gridap.Fields.ForwardDiff.Dual)
+        x.value
+      end
+      D = length(uu)
+      if D == 2
+        uu1 = val(uu[1])
+        uu2 = val(uu[2])
+        uu_new = VectorValue(uu1, uu2)
+      elseif D == 3
+        uu1 = val(uu[1])
+        uu2 = val(uu[2])
+        uu3 = val(uu[3])
+        uu_new = VectorValue(uu1, uu2, uu3)
+      end
+  
+      if iszero(norm(uu_new))
+        return (τ₁ .+ τ₃) .^ (-1 / 2)
+      end
+  
+      τ₂ = uu_new ⋅ G ⋅ uu_new
+      return (τ₁ .+ τ₂ .+ τ₃) .^ (-1 / 2)
     end
-    
+  
+    function τc(uu, gg, G, GG)
+      return 1 / (τm(uu, G, GG) ⋅ gg)
+    end
 
 
-function update_matrix_vector!(a::Function,l::Function,A::AbstractMatrix,b::AbstractVector,trial::GridapDistributed.DistributedSingleFieldFESpace,test::GridapDistributed.DistributedSingleFieldFESpace,t::Real)
- 
-end
+    U,P = trials
+    V,Q = tests
+    Tm = τm∘(u_adv, G, GG) 
+    Tc = τc∘(u_adv, gg, G, GG)
+
+    Tuu(u, v) = ∫(v ⋅ u)dΩ + ∫(u_adv ⋅ ∇(v)*Tm⊙u )dΩ + ∫(u_adv ⋅ (∇(v))'*Tm⊙u )dΩ
+    Tpu(u, q) = ∫(Tm * (∇(q)) ⊙ u)dΩ
+
+    Auu1(u, v) = ∫(ν * ∇(v) ⊙ ∇(u) + (cconv ∘ (u_adv, ∇(u))) ⋅ v )dΩ + ∫((Tm * (cconv ∘ (u_adv, ∇(v)))) ⊙ (cconv ∘ (u_adv, ∇(u))))dΩ
+    Auu2(u, v) = ∫((Tc * (∇ ⋅ v)) ⊙ (∇ ⋅ u))dΩ
+    Auu3(u, v) = ∫(u_adv ⋅ (∇(v))'*Tm⊙ (cconv ∘ (u_adv, ∇(u))) )dΩ
+  
+    Auu(u, v) = Auu1(u, v) + Auu2(u, v) + Auu3(u, v)
+  
+   
+    Aup(p, v) = ∫(-(∇ ⋅ v) * p + (Tm * (cconv ∘ (u_adv, ∇(v)))) ⊙ ∇(p))dΩ +∫(u_adv ⋅ (∇(v))'*Tm⊙ (∇(p)) )dΩ
+  
+    Apu(u, q) = ∫(q * (∇ ⋅ u) + Tm*∇(q)⋅(cconv ∘ (u_adv, ∇(u))))dΩ
+  
+    App(p, q) = ∫((Tm * ∇(q)) ⊙ (∇(p)))dΩ
+  
+    ML(u, v) = Tuu(u, v) + (θ * dt) * Auu(u, v)
+  
+    S(p, q) =  - θ * ∫((dt .+ Tm) ⋅ ((∇(q)') ⊙ (∇(p))))dΩ
+
+    rhs(v) = 0.0
 
 
-function update_matrix_vector!(a::Function,l::Function,A::AbstractMatrix,b::AbstractVector,trial::FESpace,test::FESpace,t::Real)
- 
-end
+    Af_Tuu = AffineFEOperator(Tuu,rhs,U(t),V)
+      Af_Tpu = AffineFEOperator(Tpu,rhs,U(t),Q)
 
-function update_matrixvector!(a::Function,l::Function,A::AbstractMatrix,b::AbstractVector,trial::TransientTrialFESpace,test::Union{GridapDistributed.DistributedSingleFieldFESpace, FESpace},t::Real)
-  afop = AffineFEOperator(a,l,trial(t),test)
-  println(norm(get_vector(afop)))
-  b.= get_vector(afop)
+      Af_Auu = AffineFEOperator(Auu,rhs,U(t),V)
+      Af_Aup = AffineFEOperator(Aup,rhs,P(t),V)
+      Af_Apu = AffineFEOperator(Apu,rhs,U(t),Q)
+      Af_App = AffineFEOperator(App,rhs,P(t),Q)
+
+      Af_ML = AffineFEOperator(ML,rhs,U(t),V)
+      Af_S = AffineFEOperator(S,rhs,P(t),Q)
+
+      Mat_Tuu = get_matrix(Af_Tuu)
+      Mat_Tpu = get_matrix(Af_Tpu)
+
+      Mat_Auu = get_matrix(Af_Auu)
+      Mat_Aup = get_matrix(Af_Aup)
+      Mat_Apu = get_matrix(Af_Apu)
+      Mat_App = get_matrix(Af_App)
+  
+      Mat_ML = get_matrix(Af_ML)
+      Mat_S = get_matrix(Af_S)
+      
+      Vec_Auu = get_vector(Af_Auu)
+      Vec_Aup = get_vector(Af_Aup)
+      Vec_Apu = get_vector(Af_Apu)
+      Vec_App = get_vector(Af_App)
+
+      Mat_inv_ML = allocate_Mat_inv_ML(Mat_ML)
+      inv_lump_vel_mass!(Mat_inv_ML,Mat_ML)
+
+      Vec_Ap = Vec_Apu + Vec_App
+      Vec_Au = Vec_Auu + Vec_Aup
+      return  Mat_Tuu, Mat_Tpu, Mat_Auu, Mat_Aup, Mat_Apu, Mat_App, Mat_ML, Mat_inv_ML, Mat_S, Vec_Auu, Vec_Aup,Vec_Apu, Vec_App
 end
