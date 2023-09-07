@@ -11,11 +11,13 @@ using PartitionedArrays
 using MPI
 using Parameters
 using SparseArrays
-
+using GridapPETSc
 using GridapDistributed: Algebra
 using Gridap.FESpaces
 using Gridap.Arrays
 using Gridap.CellData
+using FillArrays
+#add GridapSolvers#block-preconditioners
 using GridapSolvers.LinearSolvers
 
 include("AnalyticalSolution.jl")
@@ -25,8 +27,12 @@ include("AddNewTags.jl")
 include("HParam.jl")
 
 
+
+
+
+
 params = Dict(
-      :N => 250,
+      :N => 50,
       :D => 2, #Dimension
       :order => 1, 
       :t0 => 0.0,
@@ -99,19 +105,36 @@ params = Dict(
     vec_Au = vec_Aup+ vec_Auu
 
 
+
+    G, GG, gg = G_params(Ω,params)
+    merge!(params, Dict(:G=>G, :GG=>GG, :gg=>gg, :Cᵢ=>[4,36]))
+
+
+
+
 include("LinearUtilities.jl")
 
 coeff = [2.1875, -2.1875, 1.3125, -0.3125]
 
-# #Vectors initialization
-# using Test
+function vel_kspsetup(ksp)
+  pc = Ref{GridapPETSc.PETSC.PC}()
+  @check_error_code GridapPETSc.PETSC.KSPSetType(ksp[], GridapPETSc.PETSC.KSPGMRES)
+  # @check_error_code GridapPETSc.PETSC.KSPSetReusePreconditioner(ksp[], GridapPETSc.PETSC.PETSC_TRUE)
+  @check_error_code GridapPETSc.PETSC.KSPGetPC(ksp[], pc)
+  @check_error_code GridapPETSc.PETSC.PCSetType(pc[], GridapPETSc.PETSC.PCGAMG)
+  # 
 
-# Mat_test = Matrix(Mat_App)
-#    for i = 1:1:size(Mat_test)[1]
-#       @test isapprox(Mat_test[i,:], Mat_test[:,i]) 
-#    end
-   
-# lu(Mat_App)
+end
+
+function pres_kspsetup(ksp)
+  pc = Ref{GridapPETSc.PETSC.PC}()
+  @check_error_code GridapPETSc.PETSC.KSPSetType(ksp[], GridapPETSc.PETSC.KSPCG)
+  # @check_error_code GridapPETSc.PETSC.KSPSetReusePreconditioner(ksp[], GridapPETSc.PETSC.PETSC_TRUE)
+  @check_error_code GridapPETSc.PETSC.KSPGetPC(ksp[], pc)
+  @check_error_code GridapPETSc.PETSC.PCSetType(pc[], GridapPETSc.PETSC.PCGAMG)
+  # 
+
+end
 
 
     vec_pm = get_free_dof_values(ph0)
@@ -129,73 +152,63 @@ coeff = [2.1875, -2.1875, 1.3125, -0.3125]
     b1 = zeros(ludofs)
     b2 = zeros(lpdofs)
   
-  vec_vec_um = create_ũ_vector(vec_um)
+  # vec_vec_um = create_ũ_vector(vec_um)
   
 
   M = 6
   
 
-  solve_press = :gmres
-
   p_time = Float64[]
   u_time = Float64[]
   assembly_time = Float64[]
-
-    for (it,tn) in enumerate(time_step)
+# options = "-log_view"
+options = ""
+ũ_vector = create_ũ_vector(vec_um)
+    
+for (it,tn) in enumerate(time_step)
       err = 1
       m = 0
-      Pl = JacobiLinearSolver()
-      solver_vel = LinearSolvers.GMRESSolver(20,Pl,1.e-8)
-      ns1 = numerical_setup(symbolic_setup(solver_vel,Mat_ML),Mat_ML)
-      if solve_press == :cg
-          P_rich_sm  =  RichardsonSmoother(JacobiLinearSolver(),10,2.0/3.0) #RichardsonSmoother(JacobiLinearSolver(),10,2.0/3.0) #SymGaussSeidelSmoother(10)
-          ss2 = symbolic_setup(P_rich_sm,Mat_S)
-          ns2 = numerical_setup(ss2,Mat_S)
+      GridapPETSc.with(args=split(options)) do
+        solver_v = PETScLinearSolver(vel_kspsetup)
+        ss1 = symbolic_setup(solver_v, Mat_ML)
+        ns1 = numerical_setup(ss1, Mat_ML)
 
-      elseif solve_press ==:gmres
-        Pl = Pl = JacobiLinearSolver()
-        solver_pres = LinearSolvers.GMRESSolver(20,Pl,1.e-7)
-        ns2 = numerical_setup(symbolic_setup(solver_pres,Mat_S),Mat_S)
-      end
-
+        solver_p = PETScLinearSolver(pres_kspsetup)
+        ss2 = symbolic_setup(solver_p, Mat_S)
+        ns2 = numerical_setup(ss2, Mat_S)
+        tsolve = @elapsed begin
       while m<M
   
 
   
           println("solving velocity")
-          tu = @elapsed begin  
+          # tu = @elapsed begin  
             @time b1 = -Mat_Auu * vec_um - Mat_Aup * vec_pm - Mat_ML * vec_am +
             Mat_Auu * dt * vec_am + (1 - θ) * Mat_Aup * vec_sum_pm + vec_Au
   
             Δa_star = LinearSolvers.allocate_col_vector(Mat_ML)
-            solve!(Δa_star,ns1,b1)
-          end # end begin, solving velocity    
+           
+              @time Gridap.solve!(Δa_star, ns1, b1)
+          # end # end begin, solving velocity    
   
           println("solving pressure")
   
   
-          tp = @elapsed begin
+          # tp = @elapsed begin
               # -Vec_A because changing sign in the continuity equations
-
-             b2 .= Mat_Tpu * Δa_star + Mat_Apu * (vec_um + dt * Δa_star) + Mat_App * vec_pm + Mat_Tpu * vec_am - vec_Ap
+            
+              @time b2 .= Mat_Tpu * Δa_star + Mat_Apu * (vec_um + dt * Δa_star) + Mat_App * vec_pm + Mat_Tpu * vec_am - vec_Ap
              Δpm1 .= zeros(lpdofs)
-
-            if solve_press == :cg
-                    IterativeSolvers.cg!(Δpm1,Mat_S,b2;Pl=ns2,
-              reltol=1.0e-6,
-              log=true)
-            elseif solve_press == :gmres
-            end
-
+       
+             @time Gridap.solve!(Δpm1,ns2,b2)
+            
+               
   
-
+          # end #end begin, solving pressure  
      
-  
-          solve!(Δpm1,ns2,b2)
-          end
-        
-          push!(p_time,tp)
-          push!(u_time,tu)
+          
+          # push!(p_time,tp)
+          # push!(u_time,tu)
 
   
   
@@ -225,45 +238,40 @@ coeff = [2.1875, -2.1875, 1.3125, -0.3125]
         println("error = $err")
   
       end #end while
-      # update_ũ_vector!(vec_vec_um, vec_um)
-      # vec_um .= update_ũ(vec_vec_um, coeff)
-      # update_free_values!(u_adv, vec_um)
+    end #end elaspsed while
+    println(tsolve)
+      GridapPETSc.GridapPETSc.gridap_petsc_gc()
+    end #end GridapPETSc
+
 
       println("update_matrices")
 
     a_time = @elapsed begin
 
+
+
     uh_tn = FEFunction(U(tn), vec_um)
     ph_tn = FEFunction(P(tn), vec_pm)
+    
+    writevtk(Ω, "TG_segregated_$tn.vtu", cellfields = ["uh" => uh_tn, "uh_analytic"=> velocity(tn), "ph" => ph_tn, "ph_analytic"=> pa(tn)])
+
+    update_ũ_vector!(ũ_vector,vec_um)
+
+    uh_tn = FEFunction(U(tn), update_ũ(ũ_vector,coeff))
 
     Mat_Tuu, Mat_Tpu, Mat_Auu, Mat_Aup, Mat_Apu, Mat_App, 
-    Mat_ML, Mat_inv_ML, Mat_S, vec_Auu, vec_Aup,vec_Apu, vec_App = _matrices_and_vectors!(trials, tests, tn, uh_tn, params)
+    Mat_ML, Mat_inv_ML, Mat_S, vec_Auu, vec_Aup,vec_Apu, vec_App = _matrices_and_vectors_VMS!(trials, tests, tn, uh_tn, params)
     vec_Ap = vec_App+ vec_Apu
     vec_Au = vec_Aup+ vec_Auu
 
-      
 
-
-  end
+  end #end begin
 
   push!(assembly_time,a_time)
 
 
-      # writevtk(Ω, "TG_segregated_$tn.vtu", cellfields = ["uh" => uh_tn, "uh_analytic"=> velocity(tn), "ph" => ph_tn, "ph_analytic"=> pa(tn)])
-    end #end for
-  
-  
-  using Statistics, Plots
-    p_time = p_time[2:end]
-    u_time = u_time[2:end]
-    assembly_time =  assembly_time[2:end]
-x_time = 1:1:(length(p_time))
-# plotly()
-plot(x_time,u_time, label = "u")
-plot!(x_time,p_time, label = "p")
+ 
 
-Statistics.mean(u_time) * M
-Statistics.mean(p_time) * M
-Statistics.mean(assembly_time)
 
-# x_time
+end #end for
+N

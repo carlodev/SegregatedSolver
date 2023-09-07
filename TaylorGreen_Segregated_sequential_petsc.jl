@@ -26,8 +26,12 @@ include("AddNewTags.jl")
 include("HParam.jl")
 
 
+
+
+
+
 params = Dict(
-      :N => 250,
+      :N => 50,
       :D => 2, #Dimension
       :order => 1, 
       :t0 => 0.0,
@@ -100,7 +104,7 @@ params = Dict(
     vec_Au = vec_Aup+ vec_Auu
 
 
-# include("LinearUtilities.jl")
+include("LinearUtilities.jl")
 
 coeff = [2.1875, -2.1875, 1.3125, -0.3125]
 
@@ -149,8 +153,11 @@ end
   p_time = Float64[]
   u_time = Float64[]
   assembly_time = Float64[]
-options = "-log_view"
-    for (it,tn) in enumerate(time_step)
+# options = "-log_view"
+options = ""
+ũ_vector = create_ũ_vector(vec_um)
+    
+for (it,tn) in enumerate(time_step)
       err = 1
       m = 0
       GridapPETSc.with(args=split(options)) do
@@ -228,23 +235,26 @@ options = "-log_view"
       GridapPETSc.GridapPETSc.gridap_petsc_gc()
     end #end GridapPETSc
 
-      # update_ũ_vector!(vec_vec_um, vec_um)
-      # vec_um .= update_ũ(vec_vec_um, coeff)
-      # update_free_values!(u_adv, vec_um)
 
       println("update_matrices")
 
     a_time = @elapsed begin
 
+
+
     uh_tn = FEFunction(U(tn), vec_um)
     ph_tn = FEFunction(P(tn), vec_pm)
+    
+    writevtk(Ω, "TG_segregated_$tn.vtu", cellfields = ["uh" => uh_tn, "uh_analytic"=> velocity(tn), "ph" => ph_tn, "ph_analytic"=> pa(tn)])
+
+    update_ũ_vector!(ũ_vector,vec_um)
+
+    uh_tn = FEFunction(U(tn), update_ũ(ũ_vector,coeff))
 
     Mat_Tuu, Mat_Tpu, Mat_Auu, Mat_Aup, Mat_Apu, Mat_App, 
     Mat_ML, Mat_inv_ML, Mat_S, vec_Auu, vec_Aup,vec_Apu, vec_App = _matrices_and_vectors!(trials, tests, tn, uh_tn, params)
     vec_Ap = vec_App+ vec_Apu
     vec_Au = vec_Aup+ vec_Auu
-
-      
 
 
   end #end begin
@@ -252,22 +262,7 @@ options = "-log_view"
   push!(assembly_time,a_time)
 
 
-      writevtk(Ω, "TG_segregated_$tn.vtu", cellfields = ["uh" => uh_tn, "uh_analytic"=> velocity(tn), "ph" => ph_tn, "ph_analytic"=> pa(tn)])
+ 
+
+
 end #end for
-  
-  
-using Statistics, Plots
-    p_time = p_time[2:end]
-    u_time = u_time[2:end]
-    assembly_time =  assembly_time[2:end]
-x_time = 1:1:(length(p_time))
-# plotly()
-plot(x_time,u_time, label = "u")
-plot!(x_time,p_time, label = "p")
-
-Statistics.mean(u_time) * M
-Statistics.mean(p_time) * M
-Statistics.mean(assembly_time)
-
-# x_time
-

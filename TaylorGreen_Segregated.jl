@@ -23,9 +23,9 @@ include("SpaceConditions.jl")
 include("parallel_matrix.jl")
 include("AddNewTags.jl")
 include("HParam.jl")
+include("LinearUtilities.jl")
 
 rank_partition = (2, 2)
-
 
 
 
@@ -43,7 +43,7 @@ function main(rank_partition,distribute)
     end
   
     params = Dict(
-      :N => 250,
+      :N => 50,
       :D => 2, #Dimension
       :order => 1, 
       :t0 => 0.0,
@@ -120,7 +120,9 @@ function main(rank_partition,distribute)
   
     vec_Ap = vec_App+ vec_Apu
     vec_Au = vec_Aup+ vec_Auu
-  
+    include("LinearUtilities.jl")
+
+    coeff = [2.1875, -2.1875, 1.3125, -0.3125]
   
     #Vectors initialization
   
@@ -161,11 +163,15 @@ function main(rank_partition,distribute)
     end
     
     M = 6
-    # options = "-log_view"
-    options = ""
+    options = "-log_view"
+    # options = ""
 
   
-  
+    ũ_vector = create_ũ_vector(vec_um)
+
+    println(typeof(vec_um))
+    println(typeof(ũ_vector))
+
     for tn in time_step
       err = 1
       m = 0
@@ -252,7 +258,12 @@ function main(rank_partition,distribute)
  
       uh_tn = FEFunction(U(tn), vec_um)
       ph_tn = FEFunction(P(tn), vec_pm)
-    
+      writevtk(Ω, "TG_segregated_$tn.vtu", cellfields = ["uh" => uh_tn, "uh_analytic"=> velocity(tn), "ph" => ph_tn, "ph_analytic"=> pa(tn)])
+
+
+    update_ũ_vector!(ũ_vector,vec_um)
+    uh_tn = FEFunction(U(tn), update_ũ(ũ_vector,coeff))
+
       println("update_matrices")
   @time begin
     Mat_Tuu, Mat_Tpu, Mat_Auu, Mat_Aup, Mat_Apu, Mat_App, 
@@ -263,22 +274,18 @@ function main(rank_partition,distribute)
  
   end
 
-      # writevtk(Ω, "TG_segregated_$tn.vtu", cellfields = ["uh" => uh_tn, "uh_analytic"=> velocity(tn), "ph" => ph_tn, "ph_analytic"=> pa(tn)])
     end #end for
   
   end #end with_backend
   
-  
-function GridapDistributed.change_ghost(a::PVector,b::AbstractArray)
-  GridapDistributed.change_ghost(a,PRange(b))
-end
+
 
 with_mpi() do distribute
   main(rank_partition,distribute)
 end
 
-# with_debug() do distribute
-#   main(rank_partition,distribute)
-# end
+ with_debug() do distribute
+   main(rank_partition,distribute)
+ end
 
-#mpiexecjl --project=. -n 4 julia TaylorGreen_Segregated_v2.jl
+#mpiexecjl --project=. -n 4 julia TaylorGreen_Segregated.jl
