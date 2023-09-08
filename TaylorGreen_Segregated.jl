@@ -18,7 +18,6 @@ using GridapDistributed: Algebra
 using Gridap:FESpaces
 using Gridap.Arrays
 using Gridap.CellData
-using GridapSolvers.LinearSolvers
 
 include("AnalyticalSolution.jl")
 include("SpaceConditions.jl")
@@ -96,10 +95,7 @@ function main(rank_partition,distribute)
   
     @unpack D, N, t0, dt, tF, ν, θ = params
   
-    U0 = U(0.0)
-    P0 = P(0.0)
-    X0 = X(0.0)
-  
+   
   
     #Assemble Matrices
   
@@ -127,8 +123,8 @@ function main(rank_partition,distribute)
      
     #Vectors initialization
    
-    vec_pm = GridapDistributed.change_ghost(get_free_dof_values(ph0), Mat_Aup.col_partition)
-    vec_um = GridapDistributed.change_ghost(get_free_dof_values(uh0), Mat_Auu.col_partition)
+    vec_pm = GridapDistributed.change_ghost(get_free_dof_values(ph0), Mat_Aup)
+    vec_um = GridapDistributed.change_ghost(get_free_dof_values(uh0), Mat_Auu)
   
   
     vec_am = pzeros(Mat_ML)
@@ -142,7 +138,7 @@ function main(rank_partition,distribute)
   
     
     M = 6
-    options = "-log_view"
+    petsc_options = "-log_view"
     # options = ""
 
   
@@ -152,7 +148,7 @@ function main(rank_partition,distribute)
     for tn in time_step
       err = 1
       m = 0
-      GridapPETSc.with(args=split(options)) do
+      GridapPETSc.with(args=split(petsc_options)) do
 
         solver_vel = PETScLinearSolver(vel_kspsetup)
         ss1 = symbolic_setup(solver_vel, Mat_ML)
@@ -261,9 +257,9 @@ with_mpi() do distribute
   main(rank_partition,distribute)
 end
 
-  with_debug() do distribute
-    main(rank_partition,distribute)
- end
+   with_debug() do distribute
+     main(rank_partition,distribute)
+  end
 
  
 #mpiexecjl --project=. -n 4 julia TaylorGreen_Segregated.jl
