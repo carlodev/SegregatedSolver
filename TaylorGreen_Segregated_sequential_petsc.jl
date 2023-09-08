@@ -17,8 +17,6 @@ using Gridap.FESpaces
 using Gridap.Arrays
 using Gridap.CellData
 using FillArrays
-#add GridapSolvers#block-preconditioners
-using GridapSolvers.LinearSolvers
 
 include("AnalyticalSolution.jl")
 include("SpaceConditions.jl")

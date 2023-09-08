@@ -38,6 +38,25 @@ function inv_lump_vel_mass!(Mat_inv_ML::Vector, Mat_ML::SparseMatrixCSC)
   
 end
 
+function initialize_vectors(matrices::Tuple,uh0,ph0)
+  Mat_Tuu, Mat_Tpu, Mat_Auu, Mat_Aup, Mat_Apu, Mat_App, Mat_ML, Mat_inv_ML, Mat_S, Vec_Au, Vec_Ap = matrices
+  vec_pm = GridapDistributed.change_ghost(get_free_dof_values(ph0), Mat_Aup)
+  vec_um = GridapDistributed.change_ghost(get_free_dof_values(uh0), Mat_Auu)
+
+
+  vec_am = pzeros(Mat_ML)
+  vec_sum_pm = pzeros(Mat_Aup)
+  Δa_star = pzeros(Mat_Apu)
+  Δpm1 = pzeros(Mat_S)
+  Δa = pzeros(Mat_Tpu)
+
+  b1 = pzeros(Vec_Au)
+  b2 = pzeros(Vec_Ap)
+  ũ_vector = create_ũ_vector(vec_um)
+
+  return vec_pm,vec_um,vec_am,vec_sum_pm,Δa_star,Δpm1,Δa,b1,b2,ũ_vector
+end
+
 
 
 function initialize_matrices_and_vectors(trials,tests, t::Real, u_adv, params; method=:SUPG)
@@ -88,6 +107,6 @@ function matrices_and_vectors(trials, tests, t::Real, u_adv, params; method=:SUP
 
     Vec_Ap = Vec_Apu + Vec_App
     Vec_Au = Vec_Auu + Vec_Aup
-    return  Mat_Tuu, Mat_Tpu, Mat_Auu, Mat_Aup, Mat_Apu, Mat_App, Mat_ML, Mat_inv_ML, Mat_S, Vec_Au,Vec_Ap
+    return  Mat_Tuu, Mat_Tpu, Mat_Auu, Mat_Aup, Mat_Apu, Mat_App, Mat_ML, Mat_inv_ML, Mat_S, Vec_Au, Vec_Ap
 
 end
