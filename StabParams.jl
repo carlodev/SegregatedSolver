@@ -17,18 +17,30 @@ end
 
 
 function G_params(Ω::GridapDistributed.DistributedTriangulation, params)
-    @time G, GG, gg = map(Ω.trians) do trian
-  
-      G_params(trian, params)
+    G = map(Ω.trians) do trian
+      compute_G(trian,params)
     end
-  
+    GG = map(Ω.trians) do trian
+      compute_GG(trian,params)
+    end
+    gg = map(Ω.trians) do trian
+      compute_gg(trian,params)
+    end
+
     G = CellData.CellField(G, Ω)
     GG = CellData.CellField(GG, Ω)
     gg = CellData.CellField(gg, Ω)
-    G, GG, gg
+    return G, GG, gg
   end
+
+  function G_params(Ω::Triangulation, params)
+    G = compute_G(Ω,params)
+    GG = compute_GG(Ω,params)
+    gg = compute_gg(Ω,params)
+    return G, GG, gg
+end
   
-  function G_params(trian::Gridap.Geometry.BodyFittedTriangulation, params) #trian == Ω
+  function compute_d(trian::Gridap.Geometry.BodyFittedTriangulation, params) #trian == Ω
     D = params[:D]
   
     ξₖ = get_cell_map(trian)
@@ -42,11 +54,27 @@ function G_params(Ω::GridapDistributed.DistributedTriangulation, params)
     end
   
     d = lazy_map(evaluate, inv_Jt, Fill(eval_point, num_cells(trian)))
+    return d
+  end
+
+  function compute_G(trian::Gridap.Geometry.BodyFittedTriangulation, params) #trian == Ω
+    d = compute_d(trian, params) #trian == Ω
     dtrans = lazy_map(Broadcasting(transpose), d)
     G = lazy_map(Broadcasting(⋅), d, dtrans)
+    return G
+  end
+
+  function compute_GG(trian::Gridap.Geometry.BodyFittedTriangulation, params) #trian == Ω
+    G = compute_G(trian, params) #trian == Ω
     GG = lazy_map(Broadcasting(⊙), G, G)
-  
-  
+    return GG
+  end
+
+  function compute_gg(trian::Gridap.Geometry.BodyFittedTriangulation, params) #trian == Ω
+    @unpack D = params
+
+    d = compute_d(trian, params) #trian == Ω
+
     function gg_operation(d)
   
       if D == 2
@@ -63,8 +91,5 @@ function G_params(Ω::GridapDistributed.DistributedTriangulation, params)
     end
   
     gg = lazy_map(Broadcasting(gg_operation), d)
-  
-  
-    G, GG, gg
-  end #end G_params - Triangulation
-  
+    return gg
+  end

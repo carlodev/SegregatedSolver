@@ -12,6 +12,8 @@ using MPI
 using Parameters
 using SparseArrays
 
+using FillArrays
+
 using GridapDistributed: Algebra
 using Gridap:FESpaces
 using Gridap.Arrays
@@ -20,13 +22,16 @@ using GridapSolvers.LinearSolvers
 
 include("AnalyticalSolution.jl")
 include("SpaceConditions.jl")
-include("parallel_matrix.jl")
+include("MatrixCreation.jl")
 include("AddNewTags.jl")
-include("HParam.jl")
+include("StabParams.jl")
 include("LinearUtilities.jl")
+include("StabilizedEquations.jl")
+
+
+include("SolversOptions.jl")
 
 rank_partition = (2, 2)
-
 
 
 function main(rank_partition,distribute)
@@ -90,7 +95,6 @@ function main(rank_partition,distribute)
     merge!(params, new_dict)
   
     @unpack D, N, t0, dt, tF, ν, θ = params
-    h = h_param(Ω, D)
   
     U0 = U(0.0)
     P0 = P(0.0)
@@ -113,54 +117,29 @@ function main(rank_partition,distribute)
     trials = [U,P]
     tests = [V,Q]
   
-    merge!(params, Dict(:h=>h,:dΩ=>dΩ))
-  
-    Mat_Tuu, Mat_Tpu, Mat_Auu, Mat_Aup, Mat_Apu, Mat_App, 
-    Mat_ML, Mat_inv_ML, Mat_S, vec_Auu, vec_Aup,vec_Apu, vec_App = initialize_matrices_and_vectors(trials,tests, 0.0, u_adv, params)
-  
-    vec_Ap = vec_App+ vec_Apu
-    vec_Au = vec_Aup+ vec_Auu
-    include("LinearUtilities.jl")
+    h = h_param(Ω, D)
+    G, GG, gg = G_params(Ω,params)
+    merge!(params, Dict(:h=>h,:G=>G, :GG=>GG, :gg=>gg, :Cᵢ=>[4,36],:dΩ=>dΩ))
 
-    coeff = [2.1875, -2.1875, 1.3125, -0.3125]
+    Mat_Tuu, Mat_Tpu, Mat_Auu, Mat_Aup, Mat_Apu, Mat_App, 
+    Mat_ML, Mat_inv_ML, Mat_S, vec_Au, vec_Ap = initialize_matrices_and_vectors(trials,tests, 0.0, u_adv, params; method=:VMS)
   
+     
     #Vectors initialization
-  
-  
-  
+   
     vec_pm = GridapDistributed.change_ghost(get_free_dof_values(ph0), Mat_Aup.col_partition)
     vec_um = GridapDistributed.change_ghost(get_free_dof_values(uh0), Mat_Auu.col_partition)
   
   
-    vec_am = pzeros(Mat_ML.col_partition)
-    vec_sum_pm = pzeros(Mat_Aup.col_partition)
-    Δa_star = pzeros(Mat_Apu.col_partition)
-    Δpm1 = pzeros(Mat_S.col_partition)
-    Δa = pzeros(Mat_Tpu.col_partition)
+    vec_am = pzeros(Mat_ML)
+    vec_sum_pm = pzeros(Mat_Aup)
+    Δa_star = pzeros(Mat_Apu)
+    Δpm1 = pzeros(Mat_S)
+    Δa = pzeros(Mat_Tpu)
   
-    b1 = pzeros(vec_Au.index_partition)
-    b2 = pzeros(vec_Ap.index_partition)
+    b1 = pzeros(vec_Au)
+    b2 = pzeros(vec_Ap)
   
-  
-    function vel_kspsetup(ksp)
-      pc = Ref{GridapPETSc.PETSC.PC}()
-      @check_error_code GridapPETSc.PETSC.KSPSetType(ksp[], GridapPETSc.PETSC.KSPGMRES)
-      @check_error_code GridapPETSc.PETSC.KSPSetReusePreconditioner(ksp[], GridapPETSc.PETSC.PETSC_TRUE)
-      @check_error_code GridapPETSc.PETSC.KSPGetPC(ksp[], pc)
-      @check_error_code GridapPETSc.PETSC.PCSetType(pc[], GridapPETSc.PETSC.PCGAMG)
-      # 
-    
-    end
-    
-    function pres_kspsetup(ksp)
-      pc = Ref{GridapPETSc.PETSC.PC}()
-      @check_error_code GridapPETSc.PETSC.KSPSetType(ksp[], GridapPETSc.PETSC.KSPCG)
-      @check_error_code GridapPETSc.PETSC.KSPSetReusePreconditioner(ksp[], GridapPETSc.PETSC.PETSC_TRUE)
-      @check_error_code GridapPETSc.PETSC.KSPGetPC(ksp[], pc)
-      @check_error_code GridapPETSc.PETSC.PCSetType(pc[], GridapPETSc.PETSC.PCGAMG)
-      # 
-    
-    end
     
     M = 6
     options = "-log_view"
@@ -169,13 +148,12 @@ function main(rank_partition,distribute)
   
     ũ_vector = create_ũ_vector(vec_um)
 
-    println(typeof(vec_um))
-    println(typeof(ũ_vector))
 
     for tn in time_step
       err = 1
       m = 0
       GridapPETSc.with(args=split(options)) do
+
         solver_vel = PETScLinearSolver(vel_kspsetup)
         ss1 = symbolic_setup(solver_vel, Mat_ML)
         ns1 = numerical_setup(ss1, Mat_ML)
@@ -188,9 +166,9 @@ function main(rank_partition,distribute)
       while m<=M
 
 
-          vec_pm = GridapDistributed.change_ghost(vec_pm, Mat_Aup.col_partition)
-          vec_um = GridapDistributed.change_ghost(vec_um, Mat_Auu.col_partition)
-          vec_am = GridapDistributed.change_ghost(vec_am, Mat_ML.col_partition)
+          vec_pm = GridapDistributed.change_ghost(vec_pm, Mat_Aup)
+          vec_um = GridapDistributed.change_ghost(vec_um, Mat_Auu)
+          vec_am = GridapDistributed.change_ghost(vec_am, Mat_ML)
           @time Δpm1 .=  pzeros(Mat_S.col_partition)
   
           println("solving velocity")
@@ -198,20 +176,20 @@ function main(rank_partition,distribute)
             @time b1 .= -Mat_Auu * vec_um - Mat_Aup * vec_pm - Mat_ML * vec_am +
             Mat_Auu * dt * vec_am + (1 - θ) * Mat_Aup * vec_sum_pm + vec_Au
   
-            @time Δa_star = LinearSolvers.allocate_col_vector(Mat_ML)
+            @time Δa_star = pzeros(Mat_ML)
             @time solve!(Δa_star,ns1,b1)
             
   
   
-          vec_um = GridapDistributed.change_ghost(vec_um, Mat_Apu.col_partition)
-          vec_pm = GridapDistributed.change_ghost(vec_pm, Mat_App.col_partition)
-          vec_am = GridapDistributed.change_ghost(vec_am, Mat_Tpu.col_partition)
+          vec_um = GridapDistributed.change_ghost(vec_um, Mat_Apu)
+          vec_pm = GridapDistributed.change_ghost(vec_pm, Mat_App)
+          vec_am = GridapDistributed.change_ghost(vec_am, Mat_Tpu)
   
   
           println("solving pressure")
   
   
-          @time Δa_star = GridapDistributed.change_ghost(Δa_star, Mat_Tpu.col_partition)
+          @time Δa_star = GridapDistributed.change_ghost(Δa_star, Mat_Tpu)
 
           #-Vec_A because changing sign in the continuity equations
           @time b2 .= Mat_Tpu * Δa_star + Mat_Apu * (vec_um + dt * Δa_star) + Mat_App * vec_pm + Mat_Tpu * vec_am - vec_Ap
@@ -225,7 +203,7 @@ function main(rank_partition,distribute)
   
   
         println("update end")
-        Δpm1 = GridapDistributed.change_ghost(Δpm1, Mat_Aup.col_partition)
+        Δpm1 = GridapDistributed.change_ghost(Δpm1, Mat_Aup)
   
           Δa .= Δa_star - θ .* Mat_inv_ML .* (Mat_Aup * Δpm1)
   
@@ -253,8 +231,8 @@ function main(rank_partition,distribute)
     println("solution time")
     println(time_solve)
       GridapPETSc.GridapPETSc.gridap_petsc_gc()
-
     end #end GridapPETSc
+
  
       uh_tn = FEFunction(U(tn), vec_um)
       ph_tn = FEFunction(P(tn), vec_pm)
@@ -262,20 +240,19 @@ function main(rank_partition,distribute)
 
 
     update_ũ_vector!(ũ_vector,vec_um)
-    uh_tn = FEFunction(U(tn), update_ũ(ũ_vector,coeff))
+    uh_tn = FEFunction(U(tn), update_ũ(ũ_vector))
 
       println("update_matrices")
-  @time begin
+    @time begin
+
     Mat_Tuu, Mat_Tpu, Mat_Auu, Mat_Aup, Mat_Apu, Mat_App, 
-    Mat_ML, Mat_inv_ML, Mat_S, vec_Auu, vec_Aup,vec_Apu, vec_App = initialize_matrices_and_vectors(trials,tests, tn, uh_tn, params)
+    Mat_ML, Mat_inv_ML, Mat_S, vec_Au, vec_Ap = matrices_and_vectors(trials, tests, tn, uh_tn, params; method=:VMS)
     
-    vec_Ap = vec_App+ vec_Apu
-    vec_Au = vec_Aup+ vec_Auu
  
-  end
+    end
 
     end #end for
-  
+
   end #end with_backend
   
 
@@ -284,8 +261,9 @@ with_mpi() do distribute
   main(rank_partition,distribute)
 end
 
- with_debug() do distribute
-   main(rank_partition,distribute)
+  with_debug() do distribute
+    main(rank_partition,distribute)
  end
 
+ 
 #mpiexecjl --project=. -n 4 julia TaylorGreen_Segregated.jl
