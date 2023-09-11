@@ -1,10 +1,38 @@
+"""
+It creates the finite elements spaces accordingly to the previously generated dirichelet tags
+"""
+function creation_fe_spaces(params::Dict{Symbol,Any}, u_diri_tags, u_diri_values, p_diri_tags, p_diri_values)
+    reffeᵤ = ReferenceFE(lagrangian, VectorValue{params[:D],Float64}, params[:order])
+    reffeₚ = ReferenceFE(lagrangian, Float64, params[:order])
+
+
+    V = TestFESpace(params[:model], reffeᵤ, conformity=:H1, dirichlet_tags=u_diri_tags)
+    U = TransientTrialFESpace(V, u_diri_values)
+
+    Q = TestFESpace(params[:model], reffeₚ, conformity=:H1, dirichlet_tags=p_diri_tags)
+    P = TrialFESpace(Q, p_diri_values)
+
+    Y = MultiFieldFESpace([V, Q])
+    X = TransientMultiFieldFESpace([U, P])
+
+    return V, U, P, Q, Y, X
+end
+
+
 function create_initial_conditions(params::Dict{Symbol,Any})
-    @unpack U,P,u0,p0,D = params
+    @unpack U,P,u0, D, restart = params
 
 
         uh0 = interpolate_everywhere(u0(0.0), U(0.0))
-        ph0 = interpolate_everywhere(p0(0.0), P(0.0))
+        if !restart
+          if haskey(params,:p0)
+            @unpack p0 = params
+            ph0 = interpolate_everywhere(p0(0.0), P(0.0))
+          else
+            ph0 = interpolate_everywhere(0.0, P(0.0))
 
+          end
+        end
 
     return uh0,ph0
 end
@@ -34,8 +62,9 @@ Mat_App, Mat_ML, Mat_inv_ML, Mat_S, Vec_Au, Vec_Ap = matrices
 vec_pm,vec_um,vec_am,vec_sum_pm,Δa_star,Δpm1,Δa,b1,b2,ũ_vector = initialize_vectors(matrices,uh0,ph0)
 
 
-
-@unpack u0,p0 = params
+if case == "TaylorGreen"
+  @unpack u0,p0 = params
+end
 
 
 

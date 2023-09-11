@@ -1,36 +1,5 @@
-using Pkg
-Pkg.activate(".")
+using SegregatedSolver
 
-using Revise
-using Gridap
-using GridapDistributed
-using IterativeSolvers
-using GridapPETSc
-using LinearAlgebra
-using PartitionedArrays
-using MPI
-using Parameters
-using SparseArrays
-
-using FillArrays
-
-using GridapDistributed: Algebra
-using Gridap:FESpaces
-using Gridap.Arrays
-using Gridap.CellData
-
-include("AnalyticalSolution.jl")
-include("SpaceConditions.jl")
-include("AddNewTags.jl")
-include("StabParams.jl")
-include("LinearUtilities.jl")
-include("StabilizedEquations.jl")
-
-
-include("SolversOptions.jl")
-include("MatrixCreation.jl")
-
-include("CommonsProcedures.jl")
 rank_partition = (2, 2)
 
 
@@ -139,3 +108,5 @@ function main(rank_partition,distribute)
 #   main(rank_partition,distribute)
 # end
 #mpiexecjl --project=. -n 4 julia TaylorGreen_Segregated.jl
+
+

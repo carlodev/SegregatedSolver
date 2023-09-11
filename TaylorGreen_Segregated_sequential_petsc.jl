@@ -1,33 +1,4 @@
-using Pkg
-Pkg.activate(".")
-
-
-using Revise
-using Gridap
-using GridapDistributed
-using IterativeSolvers
-using LinearAlgebra
-using PartitionedArrays
-using MPI
-using Parameters
-using SparseArrays
-using GridapPETSc
-using GridapDistributed: Algebra
-using Gridap.FESpaces
-using Gridap.Arrays
-using Gridap.CellData
-using FillArrays
-
-include("AnalyticalSolution.jl")
-include("SpaceConditions.jl")
-include("MatrixCreation.jl")
-include("AddNewTags.jl")
-include("StabParams.jl")
-
-include("StabilizedEquations.jl")
-include("SolversOptions.jl")
-
-
+using SegregatedSolver
 
 params = Dict(
       :N => 50,

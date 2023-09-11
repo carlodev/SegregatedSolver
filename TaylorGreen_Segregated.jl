@@ -1,34 +1,5 @@
-using Pkg
-Pkg.activate(".")
+using SegregatedSolver
 
-using Revise
-using Gridap
-using GridapDistributed
-using IterativeSolvers
-using GridapPETSc
-using LinearAlgebra
-using PartitionedArrays
-using MPI
-using Parameters
-using SparseArrays
-
-using FillArrays
-
-using GridapDistributed: Algebra
-using Gridap:FESpaces
-using Gridap.Arrays
-using Gridap.CellData
-
-include("AnalyticalSolution.jl")
-include("SpaceConditions.jl")
-include("MatrixCreation.jl")
-include("AddNewTags.jl")
-include("StabParams.jl")
-include("LinearUtilities.jl")
-include("StabilizedEquations.jl")
-
-
-include("SolversOptions.jl")
 
 rank_partition = (2, 2)
 

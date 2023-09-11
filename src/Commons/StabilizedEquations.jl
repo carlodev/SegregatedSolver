@@ -8,7 +8,10 @@ val(x::Gridap.Fields.ForwardDiff.Dual) = x.value
 
 
 function segregated_equations_SUPG!(u_adv, params)
-    @unpack ν, dt,h, dΩ, θ = params
+    @unpack ν, dt,h, dΩ, Ω, θ = params
+
+    h = h_param(Ω, D)
+    merge!(params, Dict(:h => h))
 
      function τsu(u, h)
       r = 1
@@ -56,8 +59,10 @@ function segregated_equations_SUPG!(u_adv, params)
 
 
  function segregated_equations_VMS!(u_adv, params)
-    @unpack ν, dt, dΩ, θ, G, GG, gg,Cᵢ = params
+    @unpack ν, dt, dΩ, θ, Ω, Cᵢ = params
 
+    G, GG, gg = G_params(Ω, params)
+    merge!(params, Dict(:G => G, :GG => GG, :gg => gg))
 
     function τm(uu, G, GG)
       τ₁ = Cᵢ[1] * (2 / dt)^2 #Here, you can increse the 2 if CFL high
