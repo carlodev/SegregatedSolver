@@ -33,6 +33,9 @@ include(joinpath("Commons","MatrixCreation.jl"))
 include(joinpath("TaylorGreen","TaylorGreen.jl"))
 
 #TaylorGreen
+include(joinpath("LidDriven","LidDriven.jl"))
+
+#TaylorGreen
 include(joinpath("Airfoil","Airfoil.jl"))
 
 end #end module

@@ -20,21 +20,23 @@ end
 
 
 function create_initial_conditions(params::Dict{Symbol,Any})
-    @unpack U,P,u0, D, restart = params
+    @unpack U,P,u0, D, restart,dt,t0 = params
 
 
-        uh0 = interpolate_everywhere(u0(0.0), U(0.0))
+        uh0 = interpolate_everywhere(u0(t0), U(t0))
+        uh_adv = interpolate_everywhere(u0(t0+dt), U(t0))
+
         if !restart
           if haskey(params,:p0)
             @unpack p0 = params
-            ph0 = interpolate_everywhere(p0(0.0), P(0.0))
+            ph0 = interpolate_everywhere(p0(t0), P(t0))
           else
-            ph0 = interpolate_everywhere(0.0, P(0.0))
+            ph0 = interpolate_everywhere(t0, P(t0))
 
           end
         end
 
-    return uh0,ph0
+    return uh0,uh_adv,ph0
 end
 
 
@@ -48,13 +50,13 @@ end
 
 function solve_case(params::Dict{Symbol,Any})
 
-@unpack M, petsc_options, time_step, θ, dt, case, benchmark, method, trials, tests, Ω = params
-@unpack U,P = params
+@unpack M, petsc_options, time_step, θ, dt,t0, t_endramp, case, benchmark, method, trials, tests, Ω = params
+@unpack U,P,u0 = params
 
 
-uh0, ph0 = create_initial_conditions(params)
+uh0,uh_adv, ph0 = create_initial_conditions(params)
 
-matrices = initialize_matrices_and_vectors(trials,tests, 0.0, uh0, params; method=method)
+matrices = initialize_matrices_and_vectors(trials,tests, t0+dt, uh_adv, params; method=method)
 
 Mat_Tuu, Mat_Tpu, Mat_Auu, Mat_Aup, Mat_Apu, 
 Mat_App, Mat_ML, Mat_inv_ML, Mat_S, Vec_Au, Vec_Ap = matrices
@@ -66,10 +68,14 @@ if case == "TaylorGreen"
   @unpack u0,p0 = params
 end
 
-
-
-for tn in time_step
+for (ntime,tn) in enumerate(time_step)
     m = 0
+    println("norm Au")
+    println(norm(Vec_Au))
+
+    println("norm Ap")
+    println(norm(Vec_Ap))
+
     GridapPETSc.with(args=split(petsc_options)) do
 
         ns1 = create_PETSc_setup(Mat_ML,vel_kspsetup)
@@ -77,10 +83,14 @@ for tn in time_step
 
 
       time_solve = @elapsed begin 
+
+
+        vec_am .= pzeros(Mat_ML)
+        vec_sum_pm .= pzeros(Mat_Aup)
     while m<=M
 
-        @time Δpm1 .=  pzeros(Mat_S)
-        @time Δa_star .= pzeros(Mat_ML)
+        Δpm1 .=  pzeros(Mat_S)
+        Δa_star .= pzeros(Mat_ML)
 
         vec_um = GridapDistributed.change_ghost(vec_um, Mat_Auu)
         vec_pm = GridapDistributed.change_ghost(vec_pm, Mat_Aup)
@@ -89,7 +99,7 @@ for tn in time_step
 
         println("solving velocity")
           
-          @time b1 .= -Mat_Auu * vec_um - Mat_Aup * vec_pm - Mat_ML * vec_am +
+          b1 .= -Mat_Auu * vec_um - Mat_Aup * vec_pm - Mat_ML * vec_am +
           Mat_Auu * dt * vec_am + (1 - θ) * Mat_Aup * vec_sum_pm + Vec_Au
 
           @time solve!(Δa_star,ns1,b1)
@@ -100,12 +110,12 @@ for tn in time_step
         vec_pm = GridapDistributed.change_ghost(vec_pm, Mat_App)
         vec_am = GridapDistributed.change_ghost(vec_am, Mat_Tpu)
 
-        @time Δa_star = GridapDistributed.change_ghost(Δa_star, Mat_Tpu)
+        Δa_star = GridapDistributed.change_ghost(Δa_star, Mat_Tpu)
 
         println("solving pressure")
 
         #-Vec_A because changing sign in the continuity equations
-        @time b2 .= Mat_Tpu * Δa_star + Mat_Apu * (vec_um + dt * Δa_star) + Mat_App * vec_pm + Mat_Tpu * vec_am - Vec_Ap
+        b2 .= Mat_Tpu * Δa_star + Mat_Apu * (vec_um + dt * Δa_star) + Mat_App * vec_pm + Mat_Tpu * vec_am - Vec_Ap
 
         @time solve!(Δpm1,ns2,b2)
 
@@ -152,16 +162,17 @@ for tn in time_step
   end
 
   update_ũ_vector!(ũ_vector,vec_um)
-  uh_tn = FEFunction(U(tn), update_ũ(ũ_vector))
-
-    println("update_matrices")
-    @time begin
-
-  Mat_Tuu, Mat_Tpu, Mat_Auu, Mat_Aup, Mat_Apu, Mat_App, 
-  Mat_ML, Mat_inv_ML, Mat_S, Vec_Au, Vec_Ap = matrices_and_vectors(trials, tests, tn, uh_tn, params; method=method)
   
+  if tn>t_endramp
+    uh_tn = FEFunction(U(tn+dt), update_ũ(ũ_vector))
 
   end
+  
+  println("update_matrices")
+    @time begin
+     Mat_Tuu, Mat_Tpu, Mat_Auu, Mat_Aup, Mat_Apu, Mat_App, 
+      Mat_ML, Mat_inv_ML, Mat_S, Vec_Au, Vec_Ap = matrices_and_vectors(trials, tests, tn+dt, uh_tn, params; method=method)
+    end
 
   end #end for
 

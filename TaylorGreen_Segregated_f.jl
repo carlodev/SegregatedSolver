@@ -1,5 +1,31 @@
-using SegregatedSolver
+using Revise
+using Gridap
+using GridapDistributed
+using GridapGmsh
+using GridapPETSc
+using LinearAlgebra
+using PartitionedArrays
+using MPI
+using Parameters
+using SparseArrays
 
+using FillArrays
+
+using GridapDistributed: Algebra
+using Gridap:FESpaces
+using Gridap.Arrays
+using Gridap.CellData
+
+include(joinpath("src","Commons","CommonsProcedures.jl"))
+include(joinpath("src","Commons","AddNewTags.jl"))
+include(joinpath("src","Commons","StabParams.jl"))
+include(joinpath("src","Commons","LinearUtilities.jl"))
+include(joinpath("src","Commons","StabilizedEquations.jl"))
+include(joinpath("src","Commons","SolversOptions.jl"))
+include(joinpath("src","Commons","MatrixCreation.jl"))
+
+#TaylorGreen
+include(joinpath("src","TaylorGreen","TaylorGreen.jl"))
 rank_partition = (2, 2)
 
 
@@ -24,7 +50,8 @@ function main(rank_partition,distribute)
       :dt => 0.01,
       :tF => 0.5,
       :case => "TaylorGreen",
-      :θ => 0.5)
+      :θ => 0.5, 
+      :restart=>false)
 
     diameter = 0.5 #0.5 [m] vortex dimension
   

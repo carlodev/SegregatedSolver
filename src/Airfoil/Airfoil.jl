@@ -9,7 +9,7 @@ function run_airfoil(params,distribute)
     
     model = GmshDiscreteModel(parts, mesh_file_path)
     #add_SEM_tag!(model)
-    # printmodel(params, model)
+    # writevtk(model,"Airfoil")
     
 
     # hf_gen!(params)

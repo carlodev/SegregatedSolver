@@ -8,6 +8,10 @@ function main(params)
         run_function = run_taylorgreen
     elseif case == "Airfoil"
         run_function = run_airfoil
+    elseif case == "LidDriven"
+        run_function = run_liddriven
+    else
+        @error "Case $case not recognized as valid"
     end
 
     backend() do distribute
@@ -20,7 +24,7 @@ function main(params)
             end
            
         end
-        
+
         run_function(params,distribute)
     end
 

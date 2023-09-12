@@ -1,21 +1,25 @@
 using SegregatedSolver
 using Parameters,PartitionedArrays
 
+petsc_options = "-vel_ksp_type gmres -vel_pc_type gamg -vel_ksp_rtol 1.e-12  \
+                  -pres_ksp_type gmres -pres_pc_type gamg -pres_ksp_atol 1.e-5 \
+                  -ksp_converged_reason -log_view"
+
 params = Dict(
       :N => 50,
       :D => 2, #Dimension
       :order => 1, 
       :t0 => 0.0,
       :dt => 0.01,
-      :tF => 10.0,
+      :tF => 0.05,
       :case => "Airfoil",
       :θ => 0.5,
       :u_in=>1.0,
       :M=> 6, #internal iterations
       :backend => with_mpi,  #or with_mpi() with_debug()
-      :rank_partition=>(2,2),
+      :rank_partition=>(2, 2),
       :ν => 0.001,
-      :petsc_options => "",
+      :petsc_options => "-ksp_converged_reason",
       :method=>:VMS,
       :Cᵢ => [4, 36],
       :benchmark=>false,

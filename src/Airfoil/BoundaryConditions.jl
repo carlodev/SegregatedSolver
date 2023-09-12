@@ -17,7 +17,7 @@ function bc_airfoil(params)
     #No generation of Eddies during ramping
     uin0(t) = (t < t_endramp) ? 0.0 : 1
     
-    u_SEM(x,t) = (TI == 0.0) ? u_free(x,t) : u_free(x,t) .+ uin0(t) #.* generation_u_fluct!(x,t, params[:sem_cache])
+    u_SEM(x,t) = (TI == 0.0) ? u_free(x,t) : u_free(x,t) #.+ uin0(t) .* generation_u_fluct!(x,t, params[:sem_cache])
 
     u_SEM(t::Real) = x -> u_SEM(x,t)
     
