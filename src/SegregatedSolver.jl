@@ -36,6 +36,9 @@ include(joinpath("TaylorGreen","TaylorGreen.jl"))
 include(joinpath("LidDriven","LidDriven.jl"))
 
 #TaylorGreen
+include(joinpath("Cylinder","Cylinder.jl"))
+
+#TaylorGreen
 include(joinpath("Airfoil","Airfoil.jl"))
 
 end #end module

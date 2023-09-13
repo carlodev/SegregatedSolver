@@ -6,10 +6,13 @@ function main(params)
 
     if case == "TaylorGreen"
         run_function = run_taylorgreen
-    elseif case == "Airfoil"
-        run_function = run_airfoil
     elseif case == "LidDriven"
         run_function = run_liddriven
+    elseif case == "Cylinder"
+        run_function = run_cylinder
+    elseif case == "Airfoil"
+        run_function = run_airfoil
+
     else
         @error "Case $case not recognized as valid"
     end

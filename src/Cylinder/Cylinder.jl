@@ -1,6 +1,6 @@
 include("BoundaryConditions.jl")
 
-function run_airfoil(params,distribute)
+function run_cylinder(params,distribute)
     @unpack rank_partition, D, N, t0, dt, tF, ν, θ, M = params
 
     parts  = distribute(LinearIndices((prod(rank_partition),)))
@@ -9,14 +9,14 @@ function run_airfoil(params,distribute)
     
     model = GmshDiscreteModel(parts, mesh_file_path)
     #add_SEM_tag!(model)
-    writevtk(model,"Airfoil")
+    writevtk(model,"Cylinder")
     
 
     # hf_gen!(params)
     
 
 
-    u_diri_tags, u_diri_values, p_diri_tags, p_diri_values, u0, force_tags = bc_airfoil(params) 
+    u_diri_tags, u_diri_values, p_diri_tags, p_diri_values, u0, force_tags = bc_cylinder(params) 
     merge!(params, Dict(:u0 => u0, :model => model))
 
     V, U, P, Q, Y, X = creation_fe_spaces(params, u_diri_tags, u_diri_values, p_diri_tags, p_diri_values)

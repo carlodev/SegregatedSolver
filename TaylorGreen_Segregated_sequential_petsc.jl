@@ -1,4 +1,32 @@
-using SegregatedSolver
+using Revise
+using Gridap
+using GridapDistributed
+using GridapGmsh
+using GridapPETSc
+using LinearAlgebra
+using PartitionedArrays
+using MPI
+using Parameters
+using SparseArrays
+
+using FillArrays
+
+using GridapDistributed: Algebra
+using Gridap:FESpaces
+using Gridap.Arrays
+using Gridap.CellData
+
+include(joinpath("src","Commons","CommonsProcedures.jl"))
+include(joinpath("src","Commons","AddNewTags.jl"))
+include(joinpath("src","Commons","StabParams.jl"))
+include(joinpath("src","Commons","LinearUtilities.jl"))
+include(joinpath("src","Commons","StabilizedEquations.jl"))
+include(joinpath("src","Commons","SolversOptions.jl"))
+include(joinpath("src","Commons","MatrixCreation.jl"))
+
+include(joinpath("src","TaylorGreen","TaylorGreen.jl"))
+
+
 
 params = Dict(
       :N => 50,
@@ -68,15 +96,16 @@ params = Dict(
     G, GG, gg = G_params(Ω,params)
     merge!(params, Dict(:h=>h,:G=>G, :GG=>GG, :gg=>gg, :Cᵢ=>[4,36],:dΩ=>dΩ))
 
-  
+    
+    
     Mat_Tuu, Mat_Tpu, Mat_Auu, Mat_Aup, Mat_Apu, Mat_App, 
     Mat_ML, Mat_inv_ML, Mat_S, vec_Au, vec_Ap =initialize_matrices_and_vectors(trials,tests, 0.0, u_adv, params; method=:VMS)
   
 
 
+    Mat_Tuu_s, Mat_Tpu_s, Mat_Auu_s, Mat_Aup_s, Mat_Apu_s, Mat_App_s, 
+    Mat_ML_s, Mat_inv_ML_s, Mat_S_s, vec_Au_s, vec_Ap_s =initialize_matrices_and_vectors(trials,tests, 0.0, u_adv, params; method=:SUPG)
   
-
-
 
 coeff = [2.1875, -2.1875, 1.3125, -0.3125]
 

@@ -24,7 +24,6 @@ function create_initial_conditions(params::Dict{Symbol,Any})
 
 
         uh0 = interpolate_everywhere(u0(t0), U(t0))
-        uh_adv = interpolate_everywhere(u0(t0+dt), U(t0))
 
         if !restart
           if haskey(params,:p0)
@@ -36,7 +35,7 @@ function create_initial_conditions(params::Dict{Symbol,Any})
           end
         end
 
-    return uh0,uh_adv,ph0
+    return uh0,ph0
 end
 
 
@@ -54,15 +53,14 @@ function solve_case(params::Dict{Symbol,Any})
 @unpack U,P,u0 = params
 
 
-uh0,uh_adv, ph0 = create_initial_conditions(params)
+uh0, ph0 = create_initial_conditions(params)
 
-matrices = initialize_matrices_and_vectors(trials,tests, t0+dt, uh_adv, params; method=method)
+matrices = initialize_matrices_and_vectors(trials,tests, t0+dt, uh0, params; method=method)
 
 Mat_Tuu, Mat_Tpu, Mat_Auu, Mat_Aup, Mat_Apu, 
 Mat_App, Mat_ML, Mat_inv_ML, Mat_S, Vec_Au, Vec_Ap = matrices
 
 vec_pm,vec_um,vec_am,vec_sum_pm,Δa_star,Δpm1,Δa,b1,b2,ũ_vector = initialize_vectors(matrices,uh0,ph0)
-
 
 if case == "TaylorGreen"
   @unpack u0,p0 = params
@@ -162,11 +160,8 @@ for (ntime,tn) in enumerate(time_step)
   end
 
   update_ũ_vector!(ũ_vector,vec_um)
+  uh_tn = FEFunction(U(tn+dt), update_ũ(ũ_vector))
   
-  if tn>t_endramp
-    uh_tn = FEFunction(U(tn+dt), update_ũ(ũ_vector))
-
-  end
   
   println("update_matrices")
     @time begin

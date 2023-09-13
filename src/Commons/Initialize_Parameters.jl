@@ -4,7 +4,7 @@ function init_params(params)
 
     @assert length(rank_partition) == D
 
-    if case == "Airfoil" || case == "LidDriven"
+    if case == "Airfoil" || case == "LidDriven"  || case == "Cylinder"
         params[:ν] = c*ρ*u_in/Re
         println("Recompute ν = $(params[:ν])")
     end

@@ -1,5 +1,5 @@
 function bc_liddriven(model, params)
-    @unpack u_in,D = params
+    @unpack u_in,D,t_endramp = params
 
     
     labels = get_face_labeling(model)
@@ -7,8 +7,10 @@ function bc_liddriven(model, params)
     u_wall(x,t) = (D == 2) ? VectorValue(0.0, 0.0) : VectorValue(0.0, 0.0, 0.0) 
     u_wall(t::Real) = x -> u_wall(x,t)
 
-    
-    u_top(x,t) = (D == 2) ? VectorValue(u_in, 0.0) : VectorValue(u_in, 0.0, 0.0) 
+    uin(t) = (t < t_endramp) ? (u_in - u_in .*(t_endramp-t)/t_endramp) : u_in
+
+    u_top(x, t) = (D == 2) ? VectorValue(uin(t), 0.0) :  VectorValue(uin(t), 0.0, 0.0)
+    # u_top(x,t) = (D == 2) ? VectorValue(u_in, 0.0) : VectorValue(u_in, 0.0, 0.0) 
     u_top(t::Real) = x -> u_top(x,t)
 
    if D == 2

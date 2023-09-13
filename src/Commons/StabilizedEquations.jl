@@ -8,7 +8,7 @@ val(x::Gridap.Fields.ForwardDiff.Dual) = x.value
 
 
 function segregated_equations_SUPG!(u_adv, params)
-    @unpack ν, dt,h, dΩ, Ω, θ = params
+    @unpack ν, dt, dΩ, D, Ω, θ = params
 
     h = h_param(Ω, D)
     merge!(params, Dict(:h => h))
@@ -20,7 +20,6 @@ function segregated_equations_SUPG!(u_adv, params)
     
       u = val(norm(u))
       if iszero(u)
-        println("is zero")
         return (1 / τ₂^r + 1 / τ₃^r)^(-1 / r)
       end
       τ₁ = h / (2 * u)
