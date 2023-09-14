@@ -23,22 +23,6 @@ function update_ũ(ũ_vec::Vector)
 end
 
 
-"""
-    update_linear!(params::Dict{Symbol,Any})
-
-Wrapper function for updating the ũ_vector containing the speed values at previous time steps 
-and ũ which is the approximation of ũ for the non linear terms, ũ⋅(∇u)
-"""
-function update_linear!(params::Dict{Symbol,Any}, uh_tn)
-  if params[:linear]
-    update_ũ_vector!(params[:ũ_vector], uh_tn.fields)
-    zt = update_ũ(params[:ũ_vector], params[:ũ_coeff])
-    update_free_values!(params[:ũ].fields, zt)
-  end
-end
-
-
-
 
 #Extensions for scripts semplification
 function GridapDistributed.change_ghost(a::PVector,M::PSparseMatrix)
