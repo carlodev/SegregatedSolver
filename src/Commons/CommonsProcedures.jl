@@ -68,11 +68,7 @@ end
 
 for (ntime,tn) in enumerate(time_step)
     m = 0
-    println("norm Au")
-    println(norm(Vec_Au))
-
-    println("norm Ap")
-    println(norm(Vec_Ap))
+  
 
     GridapPETSc.with(args=split(petsc_options)) do
 
@@ -126,6 +122,11 @@ for (ntime,tn) in enumerate(time_step)
         vec_um .+=  dt * Δa
         vec_pm .+= Δpm1
 
+        println("norm da")
+        println(norm(Δa))
+    
+        println("norm dpm1")
+        println(norm(Δpm1))
 
         println("inner iter = $m")
         if m == 0
@@ -146,27 +147,29 @@ for (ntime,tn) in enumerate(time_step)
     GridapPETSc.GridapPETSc.gridap_petsc_gc()
   end #end GridapPETSc
 
+  update_ũ_vector!(ũ_vector,vec_um)
+  uh_tn_updt = FEFunction(U(tn+dt), update_ũ(ũ_vector))
+
+  println("Save Files")
 
   if !benchmark 
     uh_tn = FEFunction(U(tn), vec_um)
     ph_tn = FEFunction(P(tn), vec_pm)
-    
+    save_path = "$(case)_$tn.vtu"
     if case == "TaylorGreen"
-        writevtk(Ω, "$(case)_$tn.vtu", cellfields = ["uh" => uh_tn, "uh_analytic"=> u0(tn), "ph" => ph_tn, "ph_analytic"=> p0(tn)])
+        writevtk(Ω, save_path, cellfields = ["uh" => uh_tn, "uh_analytic"=> u0(tn), "ph" => ph_tn, "ph_analytic"=> p0(tn)])
     else
-        writevtk(Ω, "$(case)_$tn.vtu", cellfields = ["uh" => uh_tn, "ph" => ph_tn])
+       @time writevtk(Ω, save_path, cellfields = ["uh" => uh_tn, "uh_updt" => uh_tn_updt, "ph" => ph_tn])
 
     end
   end
 
-  update_ũ_vector!(ũ_vector,vec_um)
-  uh_tn = FEFunction(U(tn+dt), update_ũ(ũ_vector))
   
   
   println("update_matrices")
     @time begin
      Mat_Tuu, Mat_Tpu, Mat_Auu, Mat_Aup, Mat_Apu, Mat_App, 
-      Mat_ML, Mat_inv_ML, Mat_S, Vec_Au, Vec_Ap = matrices_and_vectors(trials, tests, tn+dt, uh_tn, params; method=method)
+      Mat_ML, Mat_inv_ML, Mat_S, Vec_Au, Vec_Ap = matrices_and_vectors(trials, tests, tn+dt, uh_tn_updt, params; method=method)
     end
 
   end #end for
