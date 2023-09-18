@@ -41,3 +41,25 @@ end
 function PartitionedArrays.pzeros(a::PVector)
   pzeros(a.index_partition)
 end
+
+
+function ramp_correction(n,t,t_endramp)
+  corr_fact = 1.0
+
+  if t<t_endramp
+    corr_fact = (n+1)/n
+  end  
+  
+  return corr_fact
+end
+
+
+function DataFrames.haskey(df::DataFrame,s::Symbol)
+  
+  if sum(DataFrames.propertynames(df) .== s)>0
+        return true
+  else
+        return false
+  end
+
+end

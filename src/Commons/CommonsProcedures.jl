@@ -20,23 +20,32 @@ end
 
 
 function create_initial_conditions(params::Dict{Symbol,Any})
-    @unpack U,P,u0, D, restart,dt,t0 = params
+    @unpack U,P,u0, D, restart,t0,Ω = params
 
 
         uh0 = interpolate_everywhere(u0(t0), U(t0))
+        ph0 = interpolate_everywhere(0.0, P(t0))
 
         if !restart
           if haskey(params,:p0)
             @unpack p0 = params
             ph0 = interpolate_everywhere(p0(t0), P(t0))
-          else
-            ph0 = interpolate_everywhere(t0, P(t0))
-
+          
           end
+        else
+
+          uh_0 = restart_uh_field(params)
+          ph_0 = restart_ph_field(params)
+          uh0 = interpolate_everywhere(uh_0, U(t0))
+          ph0 = interpolate_everywhere(ph_0, P(t0))
+
         end
 
-    return uh0,ph0
+  writevtk(Ω,"Initial_Conditions", cellfields=["uh0"=>uh0,"ph0"=>ph0])
+    
+  return uh0,ph0
 end
+
 
 
 function create_PETSc_setup(M::AbstractMatrix,ksp_setup::Function)
@@ -67,9 +76,11 @@ if case == "TaylorGreen"
 end
 
 for (ntime,tn) in enumerate(time_step)
-    m = 0
-  
+  # flag_iteration = false
+  # nadaptive = 1
 
+  # while flag_iteration
+    m = 0
     GridapPETSc.with(args=split(petsc_options)) do
 
         ns1 = create_PETSc_setup(Mat_ML,vel_kspsetup)
@@ -142,11 +153,17 @@ for (ntime,tn) in enumerate(time_step)
       
     end  #end while
   end #end elapsed
+
+
   println("solution time")
   println(time_solve)
     GridapPETSc.GridapPETSc.gridap_petsc_gc()
   end #end GridapPETSc
 
+  #   flag_iteration, nadaptive = iteration_successful(vec_um,ũ_vector,nadaptive)
+  # end #end while flag_iteration
+
+  # corr_ramp = ramp_correction(ntime,tn+dt,t_endramp)  
   update_ũ_vector!(ũ_vector,vec_um)
   uh_tn_updt = FEFunction(U(tn+dt), update_ũ(ũ_vector))
 
@@ -156,6 +173,7 @@ for (ntime,tn) in enumerate(time_step)
     uh_tn = FEFunction(U(tn), vec_um)
     ph_tn = FEFunction(P(tn), vec_pm)
     save_path = "$(case)_$tn.vtu"
+
     if case == "TaylorGreen"
         writevtk(Ω, save_path, cellfields = ["uh" => uh_tn, "uh_analytic"=> u0(tn), "ph" => ph_tn, "ph_analytic"=> p0(tn)])
     else
@@ -164,8 +182,6 @@ for (ntime,tn) in enumerate(time_step)
     end
   end
 
-  
-  
   println("update_matrices")
     @time begin
      Mat_Tuu, Mat_Tpu, Mat_Auu, Mat_Aup, Mat_Apu, Mat_App, 

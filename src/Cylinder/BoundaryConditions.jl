@@ -6,7 +6,7 @@ function bc_cylinder(params)
     # u_free(x,t) = D == 2 ? VectorValue(u_in, 0.0) :  VectorValue(u_in, 0.0, 0.0)
     # u_free(t::Real) = x -> u_free(x,t)
 
-    uin(t) = (t < t_endramp) ? (u_in - u_in .*(t_endramp-t)/t_endramp) : u_in
+    uin(t) = (t < t_endramp) ? (u_in .*(t/t_endramp)) : u_in
 
     u_free(x, t) = (D == 2) ? VectorValue(uin(t), 0.0) :  VectorValue(uin(t), 0.0, 0.0)
     u_free(t::Real) = x -> u_free(x,t)

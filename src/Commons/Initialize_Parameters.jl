@@ -11,9 +11,14 @@ function init_params(params)
 
     #Time Step vector creation
     time_step = t0+dt:dt:tF 
-
-
     merge!(params,Dict(:time_step=>time_step))
+
+
+    if params[:restart]
+        restart_df = DataFrame(CSV.File(params[:restart_file]))
+        params = merge!(params, Dict(:restart_df => restart_df))
+    end
+
 
 
 end
