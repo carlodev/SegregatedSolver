@@ -75,6 +75,9 @@ if case == "TaylorGreen"
   @unpack u0,p0 = params
 end
 
+df = DataFrame(tn=[], m=[], da=[], dam=[], dp=[], dpm=[])
+CSV.write("data.csv", df)
+
 for (ntime,tn) in enumerate(time_step)
   # flag_iteration = false
   # nadaptive = 1
@@ -92,7 +95,15 @@ for (ntime,tn) in enumerate(time_step)
 
         vec_am .= pzeros(Mat_ML)
         vec_sum_pm .= pzeros(Mat_Aup)
-    while m<=M
+        
+        norm_Δa0 = 10
+        norm_Δp0 = 10
+        err_norm_Δa0 = 1
+        err_norm_Δp0 = 1
+        
+        M
+      
+      while (m<= M) && (err_norm_Δa0<200) && (err_norm_Δp0<50)
 
         Δpm1 .=  pzeros(Mat_S)
         Δa_star .= pzeros(Mat_ML)
@@ -133,21 +144,27 @@ for (ntime,tn) in enumerate(time_step)
         vec_um .+=  dt * Δa
         vec_pm .+= Δpm1
 
-        println("norm da")
-        println(norm(Δa))
-    
-        println("norm dpm1")
-        println(norm(Δpm1))
-
         println("inner iter = $m")
         if m == 0
           vec_sum_pm .= Δpm1
           vec_am .= Δa
+          norm_Δa0 = norm(Δa)
+          norm_Δp0 = norm(Δpm1)
+
         else
           vec_sum_pm .+= Δpm1
           vec_am .+= Δa
 
         end
+        
+        err_norm_Δa0 = norm_Δa0/norm(Δa)
+        err_norm_Δp0 = norm_Δp0/norm(Δpm1)
+
+        println("err a")
+        println(err_norm_Δa0)
+
+        println("err p")
+        println(err_norm_Δp0)
 
         m = m + 1
       
@@ -160,12 +177,12 @@ for (ntime,tn) in enumerate(time_step)
     GridapPETSc.GridapPETSc.gridap_petsc_gc()
   end #end GridapPETSc
 
-  #   flag_iteration, nadaptive = iteration_successful(vec_um,ũ_vector,nadaptive)
-  # end #end while flag_iteration
-
-  # corr_ramp = ramp_correction(ntime,tn+dt,t_endramp)  
   update_ũ_vector!(ũ_vector,vec_um)
-  uh_tn_updt = FEFunction(U(tn+dt), update_ũ(ũ_vector))
+  # uh_tn_updt = FEFunction(U(tn+dt), update_ũ(ũ_vector))
+  uh_tn_updt = FEFunction(U(tn+dt), vec_um)
+#  if tn<t_endramp
+#     uh_tn_updt = FEFunction(U(tn+dt), vec_um)
+#  end
 
   println("Save Files")
 
@@ -189,5 +206,6 @@ for (ntime,tn) in enumerate(time_step)
     end
 
   end #end for
+
 
 end

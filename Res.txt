@@ -1,0 +1,17 @@
+using Revise
+using Gridap
+using GridapDistributed
+using GridapGmsh
+using GridapPETSc
+using LinearAlgebra
+
+using PartitionedArrays
+using MPI
+using Parameters
+using SparseArrays
+using FillArrays
+
+using CSV
+using DataFrames
+
+add LinearAlgebra, MPI, Parameters, SparseArrays, FillArrays, CSV, DataFrames, Revise

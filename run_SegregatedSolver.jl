@@ -9,28 +9,28 @@ params = Dict(
       :N => 50,
       :D => 2, #Dimension
       :order => 1, 
-      :t0 => 0.0,
-      :dt => 0.002,
-      :tF => 2.5,
+      :t0 => 4.0,
+      :dt => 0.005,
+      :tF => 15.0,
       :case => "Airfoil",
       :θ => 0.5,
       :u_in=> 1.0,
-      :M=> 5, #internal iterations
-      :backend => with_debug,  #or with_mpi() with_debug()
+      :M=> 10, #internal iterations
+      :backend => with_mpi,  #or with_mpi() with_debug()
       :rank_partition=>(2, 2),
       :ν => 0.001,
       :petsc_options => petsc_options,
       :method=>:VMS,
       :Cᵢ => [4, 36],
       :benchmark=>false,
-      :t_endramp=> 0.0,
-      :mesh_file => "DU89_2D_A1_v2.msh",
+      :t_endramp=> 5.0,
+      :mesh_file => "DU89_2D_A1_v3_w.msh",
       :TI => 0.001,
       :ρ=>1.0,
       :Re=> 250_000,
-      :c=> 0.1,
+      :c=> 1.0,
       :restart=> true,
-      :restart_file=>"InitialDU89_AoA1.csv",     
+      :restart_file=>"DU89_AoA1_t4.csv",     
 )
 
 

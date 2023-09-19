@@ -58,7 +58,7 @@ end
 
 function uh(p::VectorValue{2, Float64}, params::Dict{Symbol, Any}, idx::Int)
 
-  VectorValue(params[:restart_df].uh_0[idx][1], params[:restart_df].uh_1[idx][1])
+  VectorValue(params[:restart_df].uh_0[idx][1]  .* 0.5, params[:restart_df].uh_1[idx][1])
 end
 
 
