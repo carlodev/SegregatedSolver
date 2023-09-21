@@ -27,6 +27,7 @@ function main(params)
             end
            
         end
+        println(params)
 
         run_function(params,distribute)
     end
