@@ -66,7 +66,7 @@ function move_files(path, dir_idx::Vector)
     airfoil_dir_idx = findall(x -> x == true, isairfoil)
 
     old_path = path[dir_idx][airfoil_dir_idx]
-    new_path = joinpath.("Results", old_path)
+    new_path = joinpath.(results_path, old_path)
     for (op, np) in zip(old_path, new_path)
         mv(op, np)
     end
@@ -91,7 +91,7 @@ function clear_directories(path, file_idx::Vector, dir_idx::Vector, field_file_i
 
 
             directory_already_analyzed = intersect(file_names_clean, dir_names_clean)
-            directory_2_delete = map(x -> joinpath("Results", x), directory_already_analyzed)
+            directory_2_delete = map(x -> joinpath(results_path, x), directory_already_analyzed)
             println("Cleaning $(field_name)")
             map(x -> rm(x, recursive=true), directory_2_delete)
         end
@@ -116,7 +116,10 @@ function get_nodes(path::Vector{String})
     nodes_unique = unique(df_nodes)
 
     unique_idx = findall(Bool.(1 .- nonunique(df_nodes)))
-    CSV.write(joinpath("nodes_file.csv"), df_nodes[unique_idx, :])
+
+    file_write = joinpath(results_path, "nodes_file.csv")
+
+    CSV.write(file_write, df_nodes[unique_idx, :])
 
     return nodes_unique, unique_idx
 
@@ -136,8 +139,10 @@ function get_normals(path::Vector{String},unique_idx)
     end
 
     normals_unique =  df_normal[unique_idx, :]
-    CSV.write(joinpath("normal_file.csv"), normals_unique)
-    
+    file_write = joinpath(results_path, "normal_file.csv")
+
+    CSV.write(file_write, normals_unique)
+
 return normals_unique
 end
 
@@ -149,7 +154,7 @@ function read_field_directories(path::Vector{String}, dir_idx::Vector, field_dir
 
         for fd in field_directories[1:end]
             _, th = custom_cmp_dir(fd)
-            file_write = joinpath("Results", "$(field_name)_$(th).csv")
+            file_write = joinpath(results_path, "$(field_name)_$(th).csv")
             field_files = readdir(fd)
             df_field = DataFrame()
             for f_file in field_files

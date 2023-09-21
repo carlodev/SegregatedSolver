@@ -10,12 +10,14 @@ rho = 1.0
 μ = u0*c*rho/Re
 α = 1.0
 
+global results_path = "Results/"
+
 cellfields = Dict("ph"=>(:scalar_value,1), "friction"=>(:scalar_value,2))
 
 
 
 
-file_idx, dir_idx, path = get_file_dir_idx("Results/")
+file_idx, dir_idx, path = get_file_dir_idx(results_path)
 
 field_file_idx, field_dir_idx = get_file_dir_idx_fields(path, file_idx, dir_idx, cellfields)
 
@@ -33,7 +35,6 @@ clear_directories(path,file_idx,dir_idx,field_file_idx, field_dir_idx,cellfields
 
 Ph = average_field(path, "ph", cellfields, file_idx, field_file_idx, unique_idx;offset = 1)
 Friction = average_field(path, "friction", cellfields, file_idx, field_file_idx, unique_idx;offset = 1)
-# n_Γ = average_field(path, "n_Γ", cellfields, file_idx, field_file_idx, unique_idx)
 
 
 top_nodesx,bottom_nodesx,top_nodesy,bottom_nodesy,cp_top,cp_bottom,friction_top,friction_bottom,n_Γ_airfoil_top,n_Γ_airfoil_bottom= extract_airfoil_features(nodes_unique, n_Γ, Ph, Friction; u0=u0, A=c, rho=rho, α = α)
