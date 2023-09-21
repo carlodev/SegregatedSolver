@@ -15,10 +15,17 @@ function init_params(params)
 
 
     if params[:restart]
-        restart_df = DataFrame(CSV.File(params[:restart_file]))
-        params = merge!(params, Dict(:restart_df => restart_df))
+        @unpack restart_file, t_endramp, t0 = params
+        restart_path = joinpath(@__DIR__, "../../restarts", restart_file)
+        restart_df = DataFrame(CSV.File(restart_path))
+        
+        initial_rescale_factor = 1.0
+        
+        if t_endramp>t0
+            initial_rescale_factor = t_endramp/t0
+        end
+        params = merge!(params, Dict(:restart_df => restart_df, :initial_rescale_factor=>initial_rescale_factor))
     end
-
 
 
 end
