@@ -43,14 +43,13 @@ function PartitionedArrays.pzeros(a::PVector)
 end
 
 
-function ramp_correction(n,t,t_endramp)
-  corr_fact = 1.0
-
-  if t<t_endramp
-    corr_fact = (n+1)/n
-  end  
-  
-  return corr_fact
+function Base.println(d::Dict)
+  for k in keys(d)
+    if k !== :restart_df
+    kval = d[k]
+    println("$k = $kval")
+    end
+  end
 end
 
 
