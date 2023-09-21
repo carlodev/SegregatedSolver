@@ -17,7 +17,8 @@ function run_airfoil(params,distribute)
 
 
     u_diri_tags, u_diri_values, p_diri_tags, p_diri_values, u0, force_tags = bc_airfoil(params) 
-    merge!(params, Dict(:u0 => u0, :model => model))
+    merge!(params, Dict(:u0 => u0, :model => model, :force_tags=>force_tags, :parts=>parts))
+    forces_domain!(params)
 
     V, U, P, Q, Y, X = creation_fe_spaces(params, u_diri_tags, u_diri_values, p_diri_tags, p_diri_values)
     

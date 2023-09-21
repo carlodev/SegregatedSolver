@@ -75,14 +75,11 @@ if case == "TaylorGreen"
   @unpack u0,p0 = params
 end
 
-df = DataFrame(tn=[], m=[], da=[], dam=[], dp=[], dpm=[])
-CSV.write("data.csv", df)
+local_unique_idx = get_nodes(params)
+
 
 for (ntime,tn) in enumerate(time_step)
-  # flag_iteration = false
-  # nadaptive = 1
 
-  # while flag_iteration
     m = 0
     GridapPETSc.with(args=split(petsc_options)) do
 
@@ -103,7 +100,7 @@ for (ntime,tn) in enumerate(time_step)
         
         M
       
-      while (m<= M) && (err_norm_Δa0<200) && (err_norm_Δp0<50)
+      while (m<= M) && (err_norm_Δa0<200)
 
         Δpm1 .=  pzeros(Mat_S)
         Δa_star .= pzeros(Mat_ML)
@@ -184,12 +181,11 @@ for (ntime,tn) in enumerate(time_step)
 #     uh_tn_updt = FEFunction(U(tn+dt), vec_um)
 #  end
 
-  println("Save Files")
+uh_tn = FEFunction(U(tn), vec_um)
+ph_tn = FEFunction(P(tn), vec_pm)
+save_path = "$(case)_$(tn)_.vtu"
+  if !benchmark && (mod(ntime,100)==0 || ntime<10) 
 
-  if !benchmark 
-    uh_tn = FEFunction(U(tn), vec_um)
-    ph_tn = FEFunction(P(tn), vec_pm)
-    save_path = "$(case)_$tn.vtu"
 
     if case == "TaylorGreen"
         writevtk(Ω, save_path, cellfields = ["uh" => uh_tn, "uh_analytic"=> u0(tn), "ph" => ph_tn, "ph_analytic"=> p0(tn)])
@@ -198,12 +194,16 @@ for (ntime,tn) in enumerate(time_step)
 
     end
   end
+  export_fields(params, local_unique_idx, tn, uh_tn, ph_tn)
 
-  println("update_matrices")
+  if mod(ntime,10)==0
+    println("update_matrices")
+
     @time begin
      Mat_Tuu, Mat_Tpu, Mat_Auu, Mat_Aup, Mat_Apu, Mat_App, 
       Mat_ML, Mat_inv_ML, Mat_S, Vec_Au, Vec_Ap = matrices_and_vectors(trials, tests, tn+dt, uh_tn_updt, params; method=method)
     end
+  end
 
   end #end for
 

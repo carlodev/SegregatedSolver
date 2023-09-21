@@ -32,6 +32,7 @@ include(joinpath("Commons","StabilizedEquations.jl"))
 include(joinpath("Commons","SolversOptions.jl"))
 include(joinpath("Commons","MatrixCreation.jl"))
 include(joinpath("Commons","Restart.jl"))
+include(joinpath("Commons","ExportUtilities.jl"))
 
 #TaylorGreen
 include(joinpath("TaylorGreen","TaylorGreen.jl"))
