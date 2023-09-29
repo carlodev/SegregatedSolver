@@ -41,7 +41,7 @@ function run_liddriven(params,distribute)
     # hf_gen!(params)
 
     u_diri_tags, u_diri_values, p_diri_tags, p_diri_values, u0 = bc_liddriven(model, params) #u_top in bc_liddriven taken as initial velocity
-    merge!(params, Dict(:u0 => u0, :model => model))
+    merge!(params, Dict(:u0 => u0, :model => model, :force_tags=>nothing, :parts=>parts))
 
 
     
