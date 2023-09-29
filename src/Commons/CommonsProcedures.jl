@@ -41,7 +41,7 @@ function create_initial_conditions(params::Dict{Symbol,Any})
 
         end
 
-  writevtk(Ω,"Initial_Conditions", cellfields=["uh0"=>uh0,"ph0"=>ph0])
+  writevtk(Ω,"Initial_Conditions_", cellfields=["uh0"=>uh0,"ph0"=>ph0])
     
   return uh0,ph0
 end
@@ -52,9 +52,11 @@ function create_PETSc_setup(M::AbstractMatrix,ksp_setup::Function)
       solver = PETScLinearSolver(ksp_setup)
       ss = symbolic_setup(solver, M)
       ns = numerical_setup(ss, M)
+      # @check_error_code GridapPETSc.PETSC.KSPView(ns.ksp[],C_NULL)
 
       return ns
 end
+
 
 function solve_case(params::Dict{Symbol,Any})
 
@@ -75,16 +77,34 @@ if case == "TaylorGreen"
   @unpack u0,p0 = params
 end
 
-local_unique_idx = get_nodes(params)
+if case == "Airfoil"
+  local_unique_idx = get_nodes(params)
+end
 
-
+GridapPETSc.with(args=split(petsc_options)) do
+  ns1 = create_PETSc_setup(Mat_ML,vel_kspsetup)
+  ns2 = create_PETSc_setup(Mat_S,pres_kspsetup)
+  uh_tn_updt = FEFunction(U(t0), vec_um)
+  
 for (ntime,tn) in enumerate(time_step)
 
-    m = 0
-    GridapPETSc.with(args=split(petsc_options)) do
+      m = 0
 
-        ns1 = create_PETSc_setup(Mat_ML,vel_kspsetup)
-        ns2 = create_PETSc_setup(Mat_S,pres_kspsetup)
+      if mod(ntime,10)==0
+        println("update_matrices")
+    
+        @time begin
+         Mat_Tuu, Mat_Tpu, Mat_Auu, Mat_Aup, Mat_Apu, Mat_App, 
+          Mat_ML, Mat_inv_ML, Mat_S, Vec_Au, Vec_Ap = matrices_and_vectors(trials, tests, tn+dt, uh_tn_updt, params; method=method)
+        end
+
+        println("update numerical set up")
+        @time begin
+          numerical_setup!(ns1,Mat_ML)
+          numerical_setup!(ns2,Mat_S)
+        end
+      end
+
 
 
       time_solve = @elapsed begin 
@@ -164,7 +184,7 @@ for (ntime,tn) in enumerate(time_step)
         println(err_norm_Δp0)
 
         m = m + 1
-      
+
     end  #end while
   end #end elapsed
 
@@ -172,15 +192,15 @@ for (ntime,tn) in enumerate(time_step)
   println("solution time")
   println(time_solve)
     GridapPETSc.GridapPETSc.gridap_petsc_gc()
-  end #end GridapPETSc
 
   update_ũ_vector!(ũ_vector,vec_um)
   # uh_tn_updt = FEFunction(U(tn+dt), update_ũ(ũ_vector))
   uh_tn_updt = FEFunction(U(tn+dt), vec_um)
-#  if tn<t_endramp
-#     uh_tn_updt = FEFunction(U(tn+dt), vec_um)
-#  end
+#  if ntime>100
+#   uh_tn_updt = FEFunction(U(tn+dt), update_ũ(ũ_vector))
+# end
 
+println("Solution computed at time $tn")
 uh_tn = FEFunction(U(tn), vec_um)
 ph_tn = FEFunction(P(tn), vec_pm)
 save_path = "$(case)_$(tn)_.vtu"
@@ -194,18 +214,15 @@ save_path = "$(case)_$(tn)_.vtu"
 
     end
   end
-  export_fields(params, local_unique_idx, tn, uh_tn, ph_tn)
 
-  if mod(ntime,10)==0
-    println("update_matrices")
-
-    @time begin
-     Mat_Tuu, Mat_Tpu, Mat_Auu, Mat_Aup, Mat_Apu, Mat_App, 
-      Mat_ML, Mat_inv_ML, Mat_S, Vec_Au, Vec_Ap = matrices_and_vectors(trials, tests, tn+dt, uh_tn_updt, params; method=method)
-    end
+  if case == "Airfoil"
+    export_fields(params, local_unique_idx, tn, uh_tn, ph_tn)
   end
 
+
+
   end #end for
+end #end GridapPETSc
 
 
 end
