@@ -1,18 +1,22 @@
 
 function custom_cmp_file(x::String)
-    number_idx = findfirst(isdigit, x)
-    str, num = SubString(x, 1, number_idx - 1), SubString(x, number_idx, length(x) - 4)
+    str_len = length(x)
+
+    offset = findlast("/",x)[1]
+    number_idx = findfirst(isdigit, x[offset:end]) + offset-1
+    str, num = SubString(x, 1, number_idx - 1), SubString(x, number_idx, str_len-4)
     return str, parse(Float64, num)
 end
 
 function custom_cmp_dir(x::String)
-    number_idx = findfirst(isdigit, x)
-    str, num = SubString(x, 1, number_idx - 1), SubString(x, number_idx, length(x))
+    str_len = length(x)
 
+    offset = findlast("/",x)[1]
+    number_idx = findfirst(isdigit, x[offset:end]) + offset-1
+    str, num = SubString(x, 1, number_idx - 1), SubString(x, number_idx, str_len)
+    
     return str, parse(Float64, num)
 end
-
-
 
 
 function get_file_dir_idx(path0::String)
@@ -199,12 +203,33 @@ function average_field(path::Vector{String}, field_name::String, cellfields::Dic
         df_field = df_field .+ df_tmp ./ n_time_steps
     end
 
-    return df_field
+    #Option for 3D average
+    nodes_file_path = results_path * "nodes_file.csv"
+    dfnodes = DataFrame(CSV.File(nodes_file_path))
+    if !isempty(findall(z-> z > 0, dfnodes.z))
+        println("3D Averaging")
+        Zpoints = find_z_aligned(dfnodes)
+        NZ = length(Zpoints[1])
+
+        zv = zeros(length(Zpoints))
+        df_field_avg =  DataFrame(p=zv)
+
+
+        for (xyidx,zidx) in enumerate(Zpoints)
+            z_avg = sum(df_field[zidx,:p]) / NZ
+            df_field_avg[xyidx,:p] = z_avg
+        end
+
+    else
+        df_field_avg = df_field
+
+    end
+
+    return df_field_avg
 end
 
 
-
-function extract_airfoil_features(nodes_unique::DataFrame, n_Γ::DataFrame, Ph::DataFrame, Friction::DataFrame; u0::Float64, A::Float64, rho::Float64, α::Float64)
+function extract_airfoil_features(nodes_unique::DataFrame, n_Γ0::DataFrame, Ph::DataFrame, Friction::DataFrame; u0::Float64, A::Float64, rho::Float64, α::Float64)
     q = 0.5 .* u0^2 * A * rho
     p1 = [0.0, 0.0] #leading edge
     p2 = [cosd(α), -1 * sind(α)] #trailing edge
@@ -213,16 +238,33 @@ function extract_airfoil_features(nodes_unique::DataFrame, n_Γ::DataFrame, Ph::
  
 
     idx_nodes_airfoil = findall(abs.(nodes_unique.y) .< 0.5)
-    nodes_airfoil = nodes_unique[idx_nodes_airfoil, :]
+    nodes_airfoil0 = nodes_unique[idx_nodes_airfoil, :]
+    n_Γ_airfoil0 = n_Γ0[idx_nodes_airfoil, :]
 
+    if !isempty(findall(z-> z > 0, nodes_airfoil0.z))
 
+    
+    Zpoints = find_z_aligned(nodes_airfoil0)
+    
+    XYunique = Int64[]
+    for i in Zpoints
+        push!(XYunique,i[1])
+    end
+    
+    nodes_airfoil = nodes_airfoil0[XYunique,:]
+    n_Γ_airfoil = n_Γ_airfoil0[XYunique,:]
+else
+    nodes_airfoil = nodes_airfoil0
+    n_Γ_airfoil = n_Γ_airfoil0
+    end
+    
+    
     XY_Airfoil = Vector[]
     for (i, j) in zip(nodes_airfoil.x, nodes_airfoil.y)
         push!(XY_Airfoil, [i, j])
     end
 
 
-    n_Γ_airfoil = n_Γ[idx_nodes_airfoil, :]
 
     rev_idx = findall(is_above.(XY_Airfoil;p1,p2) .* sign.(n_Γ_airfoil.y) .<0) #reverse n_Γ sign for this
 
@@ -241,12 +283,19 @@ function extract_airfoil_features(nodes_unique::DataFrame, n_Γ::DataFrame, Ph::
     bottom_nodes_perm = bottom_nodes[perm_bottom, :]
 
 
+    cp_top = Ph[idx_top, :][perm_top, :] ./ q
+    cp_bottom = Ph[idx_bottom, :][perm_bottom, :] ./ q
 
-    cp_top = Ph[idx_nodes_airfoil, :][idx_top, :][perm_top, :] ./ q
-    cp_bottom = Ph[idx_nodes_airfoil, :][idx_bottom, :][perm_bottom, :] ./ q
+    friction_top = .-Friction[idx_top, :][perm_top, :] ./ q .* μ
+    friction_bottom = Friction[idx_bottom, :][perm_bottom, :] ./ q .* μ
 
-    friction_top = .-Friction[idx_nodes_airfoil, :][idx_top, :][perm_top, :] ./ q .* μ
-    friction_bottom = Friction[idx_nodes_airfoil, :][idx_bottom, :][perm_bottom, :] ./ q .* μ
+
+
+    # cp_top = Ph[idx_nodes_airfoil, :][idx_top, :][perm_top, :] ./ q
+    # cp_bottom = Ph[idx_nodes_airfoil, :][idx_bottom, :][perm_bottom, :] ./ q
+
+    # friction_top = .-Friction[idx_nodes_airfoil, :][idx_top, :][perm_top, :] ./ q .* μ
+    # friction_bottom = Friction[idx_nodes_airfoil, :][idx_bottom, :][perm_bottom, :] ./ q .* μ
 
     n_Γ_airfoil_top = n_Γ_airfoil[idx_top, :][perm_top, :]
     n_Γ_airfoil_bottom = n_Γ_airfoil[idx_bottom, :][perm_bottom, :]
@@ -260,6 +309,26 @@ end
 
 
 
+
+"""
+It provides a Vector of length = airfoil points in 2D. Each element is a vector, where the elements have the same x and y.
+"""
+function find_z_aligned(df::DataFrame)
+    zpoints = findall(x-> x == 0, df.z)
+
+    
+    ZPoints = Vector[]
+    
+    for zidx in zpoints
+        xidx = findall(x->x== df[zidx,:].x, df.x)
+        yidx = findall(y->y== df[zidx,:].y, df.y)
+        line_points = intersect(xidx,yidx) 
+        push!(ZPoints,line_points)
+    end
+    
+    ZPoints
+    
+end
 
 function get_tangent_x(V::Vector)
     x, y, z = V
@@ -281,4 +350,13 @@ function is_above(p; p1, p2)
     else
         return -1
     end
+end
+
+function read_cfd_xlsx(filename::String)
+coeff_top = DataFrame(XLSX.readtable(filename,"top"))
+coeff_bottom = DataFrame(XLSX.readtable(filename,"bottom"))
+coeff_top[!,:] = convert.(Float64,coeff_top[!,:])
+coeff_bottom[!,:] = convert.(Float64,coeff_bottom[!,:])
+
+return coeff_top, coeff_bottom
 end
